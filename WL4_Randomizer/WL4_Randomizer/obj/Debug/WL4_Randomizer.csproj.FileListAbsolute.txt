@@ -1,7 +1,0 @@
-C:\Users\William\Documents\GitHub\WL4-Randomizer\WL4_Randomizer\WL4_Randomizer\obj\Debug\WL4_Randomizer.csprojResolveAssemblyReference.cache
-C:\Users\William\Documents\GitHub\WL4-Randomizer\WL4_Randomizer\WL4_Randomizer\bin\Debug\rooms.txt
-C:\Users\William\Documents\GitHub\WL4-Randomizer\WL4_Randomizer\WL4_Randomizer\bin\Debug\WL4_Randomizer.exe.config
-C:\Users\William\Documents\GitHub\WL4-Randomizer\WL4_Randomizer\WL4_Randomizer\bin\Debug\WL4_Randomizer.exe
-C:\Users\William\Documents\GitHub\WL4-Randomizer\WL4_Randomizer\WL4_Randomizer\bin\Debug\WL4_Randomizer.pdb
-C:\Users\William\Documents\GitHub\WL4-Randomizer\WL4_Randomizer\WL4_Randomizer\obj\Debug\WL4_Randomizer.exe
-C:\Users\William\Documents\GitHub\WL4-Randomizer\WL4_Randomizer\WL4_Randomizer\obj\Debug\WL4_Randomizer.pdb
