@@ -6,8 +6,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{EEBED692-B089-4B28-AF0B-AA091BA89F51}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>GBA_Decoder</RootNamespace>
-    <AssemblyName>GBA_Decoder</AssemblyName>
+    <RootNamespace>WL4_Randomizer</RootNamespace>
+    <AssemblyName>WL4_Randomizer</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
