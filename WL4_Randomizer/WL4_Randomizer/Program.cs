@@ -40,8 +40,6 @@ namespace GBA_Decoder
         
         public static void Main(string[] args)
         {
-            args = new string[] { "C:\\Users\\William\\Desktop\\GBA\\roms\\WarioLand4\\WarioLand4Original.gba" };
-
             //Get the options and "Which rooms to randomize" documents
             string optionsPath = Directory.GetCurrentDirectory() + "\\options.txt";
             string rngTest = Directory.GetCurrentDirectory() + "\\rooms.txt";
