@@ -40,6 +40,8 @@ namespace GBA_Decoder
         
         public static void Main(string[] args)
         {
+            args = new string[] { "C:\\Users\\William\\Desktop\\GBA\\roms\\WarioLand4\\WarioLand4Original.gba" };
+
             //Get the options and "Which rooms to randomize" documents
             string optionsPath = Directory.GetCurrentDirectory() + "\\options.txt";
             string rngTest = Directory.GetCurrentDirectory() + "\\rooms.txt";
@@ -62,7 +64,7 @@ namespace GBA_Decoder
             string oldPath = args[0];
             // Read rom
             buffer = File.ReadAllBytes(args[0]);
-            
+
             // Get RNG
             Console.WriteLine("Type in your seed now.  Leave blank if you wish to have a seed made for you. ");
             string s = Console.ReadLine();
@@ -84,6 +86,7 @@ namespace GBA_Decoder
             int singleIndex;
 
             // Prevent objects from spawning here
+            buffer[0x59B17E] = 0x15;
             buffer[0x5F152A] = 0x15;
             buffer[0x5F152D] = 0x15;
             buffer[0x5F08BE] = 0x15;
@@ -122,14 +125,15 @@ namespace GBA_Decoder
                     CDLess.Randomize(ref buffer, singleIndex, rngGen);
                 }
             }
-            CDLess.ChangeCDLess(new int[] { 0x5991D0, 0x59AC40, 0x5995D4, 0x599B1C, 0x59A5F4, 0x59AD14, 0x59B17C, 0x59B2DC, 0x599FFC },
+            CDLess.ChangeNormal(new int[] { 0x5991D0, 0x59AC40, 0x5995D4, 0x599B1C, 0x59A5F4, 0x59AD14, 0x59B17C, 0x59B2DC, 0x599FFC },
                 new int[] { 0x5991D0, 0x59AC40, 0x5995D4, 0x599B1C, 0x59A5F4, 0x59AD14, 0x59B17C, 0x59B2DC },
-                new int[] { 0x5991D0, 0x59AC40, 0x5995D4, 0x599B1C, 0x59A5F4, 0x59B17C, 0x59B2DC }, ref buffer, rngGen);
+                new int[] { 0x5991D0, 0x59AC40, 0x5995D4, 0x599B1C, 0x59A5F4, 0x59B17C, 0x59B2DC }, ref buffer, rngGen, true);
 
             //Reverting entities to normal state when needed
+            buffer[0x59B17E] = 0x07;
             buffer[0x5F152A] = buffer[0x5F21D4];
             buffer[0x5F152D] = buffer[0x5F21DA];
-            buffer[0x5F08BE] = 0x7;
+            buffer[0x5F08BE] = 0x07;
 
             File.WriteAllBytes(newPath, buffer);
         }
@@ -145,105 +149,8 @@ namespace GBA_Decoder
     }
     class CDLess
     {
-
-        public static void ChangeCDLess(int[] rooms, int[] frog, int[] chests, ref byte[] rom, Random rng)
-        {
-            List<int> possiblities = new List<int>();
-            for (int i = 0; i < chests.Length; i++)
-            {
-                possiblities.Add(i);
-            }
-
-            int buffer = 0;
-            int index = 0;
-
-            for (int i = 0; i < rooms.Length; i++) // Clear levels
-            {
-                index = rooms[i] + 2;
-
-                while (rom[index] != 0xFF) // Check every entity in list
-                {
-                    if (rom[index] < 0xF && (rom[index] != 0x08 || frog.Length > 0)) // If swappable entity, turn into gem, and skip frog switch if keeping in same place
-                    {
-                        rom[index] = 0x07;
-                    }
-                    index += 3;
-                }
-            }
-
-            bool loopOn = true;
-            while (loopOn)
-            {
-                if (frog.Length == 0)
-                    break;
-
-                index = frog[rng.Next(0, frog.Length)] + 2;
-                while (rom[index] != 0xFF)
-                {
-                    if (rom[index] == 0x07)
-                    {
-                        loopOn = false;
-                        rom[index] = 0x08;
-                        break;
-                    }
-                    index += 3;
-                }
-            }
-
-            for (int i = 0; i < 6; i++) // Chests
-            {
-                if (possiblities.Count == 0 && i >= 4 || i == 4)
-                    break;
-
-                loopOn = true;
-                buffer = rng.Next(possiblities.Count);
-
-                index = possiblities[buffer];
-                index = chests[index] + 2;
-
-                while (rom[index] != 0xFF)
-                {
-                    if (rom[index] == 0x07 &&
-                        !(rom[index - 2] == 0x8 && rom[index - 1] == 0x34 && index == 0x5CEDE3))
-                    {
-                        rom[index] = (byte)(i + 1);
-                        loopOn = false;
-                        break;
-                    }
-                    index += 3;
-
-                }
-
-                if (loopOn)
-                    i--;
-                else
-                    possiblities.RemoveAt(buffer);
-            }
-
-            List<int> potentials = new List<int>();
-
-            loopOn = true;
-            while (loopOn)
-            {
-                index = rooms[rng.Next(0, rooms.Length)] + 2;
-                while (rom[index] != 0xFF)
-                {
-                    if (rom[index] == 0x07)
-                    {
-                        loopOn = false;
-                        potentials.Add(index);
-                    }
-                    index += 3;
-                }
-
-                if (!loopOn)
-                {
-                    rom[potentials[rng.Next(potentials.Count)]] = 0x09;
-                }
-            }
-
-        }
-        public static void ChangeNormal(int[] rooms, int[] frog, int[] chests, ref byte[] rom, Random rng)
+        
+        public static void ChangeNormal(int[] rooms, int[] frog, int[] chests, ref byte[] rom, Random rng, bool hasCD = true)
         {
             List<int> possiblities = new List<int>();
             for (int i = 0; i < chests.Length; i++)
@@ -274,7 +181,9 @@ namespace GBA_Decoder
                 if (frog.Length == 0)
                     break;
 
-                index = frog[rng.Next(0, frog.Length)] + 2;
+                index = rng.Next(0, frog.Length);
+
+                index = frog[index] + 2;
                 while (rom[index] != 0xFF)
                 {
                     if (rom[index] == 0x07)
@@ -291,6 +200,8 @@ namespace GBA_Decoder
             {
                 if (possiblities.Count == 0 && i >= 4)
                     break;
+                if (!hasCD && i == 4)
+                    continue;
 
                 loopOn = true;
                 buffer = rng.Next(possiblities.Count);
