@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace GBA_Decoder
+namespace WL4_Randomizer
 {
     enum Difficulty
     {
@@ -37,7 +37,7 @@ namespace GBA_Decoder
         static int[] testLocations = new int[] { 0x5991D2 };
 
         static byte[] buffer;
-        
+
         public static void Main(string[] args)
         {
             //Get the options and "Which rooms to randomize" documents
@@ -62,14 +62,16 @@ namespace GBA_Decoder
             string oldPath = args[0];
             // Read rom
             buffer = File.ReadAllBytes(args[0]);
-
+            
+            //DisplayDoorwayData();
+            
             // Get RNG
             Console.WriteLine("Type in your seed now.  Leave blank if you wish to have a seed made for you. ");
             string s = Console.ReadLine();
             int seed;
             if (!int.TryParse(s, out seed))
                 seed = s == "" ? (int)DateTime.Now.Ticks : s.GetHashCode();
-            
+
             rngGen = new Random(seed);
 
             // Set new rom path
@@ -123,9 +125,6 @@ namespace GBA_Decoder
                     CDLess.Randomize(ref buffer, singleIndex, rngGen);
                 }
             }
-            CDLess.ChangeNormal(new int[] { 0x5991D0, 0x59AC40, 0x5995D4, 0x599B1C, 0x59A5F4, 0x59AD14, 0x59B17C, 0x59B2DC, 0x599FFC },
-                new int[] { 0x5991D0, 0x59AC40, 0x5995D4, 0x599B1C, 0x59A5F4, 0x59AD14, 0x59B17C, 0x59B2DC },
-                new int[] { 0x5991D0, 0x59AC40, 0x5995D4, 0x599B1C, 0x59A5F4, 0x59B17C, 0x59B2DC }, ref buffer, rngGen, true);
 
             //Reverting entities to normal state when needed
             buffer[0x59B17E] = 0x07;
@@ -133,9 +132,74 @@ namespace GBA_Decoder
             buffer[0x5F152D] = buffer[0x5F21DA];
             buffer[0x5F08BE] = 0x07;
 
+            // Randomize room locations
+            rooms = File.ReadAllLines(Directory.GetCurrentDirectory() + "\\path.txt");
+
+            PathCreator test;
+
+            for (int i = 0; i < rooms.Length; i++)
+            {
+                if (rooms[i] == "")
+                    continue;
+
+                if (rooms[i][0] == 'L')
+                {
+                    test = new PathCreator(ref buffer, byte.Parse(rooms[i][1].ToString()), byte.Parse(rooms[i][2].ToString()), ref rooms, i + 1);
+                    test.CreatePath(rngGen, ref buffer);
+                }
+            }
+            
             File.WriteAllBytes(newPath, buffer);
         }
-        
+
+        private static void DisplayRoomData()
+        {
+            int index = 0x3F2F88;
+            int count = 0;
+            int levelCount = 0;
+            byte maxRoom = 0;
+
+            List<string> fileTest = new List<string>();
+            string str = "";
+
+            fileTest.Add("LTF	RID	X1	X2	Y1	Y2	LDs	XDp	YDp	ETb	BG1	BG2");
+
+            while (buffer[index] <= 0x06)
+            {
+                if (buffer[index] >= 0x00)
+                {
+                    for (int i = 0; i < 12; i++)
+                    {
+                        str += buffer[index + i].ToString("D3") + " ";
+                    }
+
+                    if (buffer[index] > 0x00)
+                    {
+                        str = str.Remove(str.Length - 1);
+                        count++;
+                        maxRoom = Math.Max(buffer[index + 1], maxRoom);
+                    }
+                    else
+                    {
+                        str += count + " " + maxRoom;
+                        count = 0;
+                        maxRoom = 0;
+                        levelCount++;
+                    }
+                    fileTest.Add(str);
+                    str = "";
+                }
+                index += 12;
+            }
+            fileTest.Add(levelCount.ToString());
+
+            File.WriteAllLines(Directory.GetCurrentDirectory() + "\\test.txt", fileTest.ToArray());
+
+            Console.ReadKey();
+
+            return;
+        }
+
         // General:
         // 1-6 chests (gem, cd, heart)
         // 7 Gem
@@ -144,10 +208,14 @@ namespace GBA_Decoder
         // 0x11 Portal
 
         //
+
+        public static int GetPointer(int offset)
+        {
+            return buffer[offset] + buffer[offset + 1] * 256 + buffer[offset + 2] * 65536;
+        }
     }
     class CDLess
     {
-        
         public static void ChangeNormal(int[] rooms, int[] frog, int[] chests, ref byte[] rom, Random rng, bool hasCD = true)
         {
             List<int> possiblities = new List<int>();

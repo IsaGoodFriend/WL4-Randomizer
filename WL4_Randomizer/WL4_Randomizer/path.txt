@@ -1,0 +1,5 @@
+-headerIndex = 0x6391C4 + passage * 24 + level * 4 // Toy = 4
+-levelLocation = 0x639068 + headerIndex * 12
+
+-Hall
+L00
