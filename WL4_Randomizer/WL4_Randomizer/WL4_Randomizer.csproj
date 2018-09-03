@@ -52,6 +52,9 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="path.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="rooms.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

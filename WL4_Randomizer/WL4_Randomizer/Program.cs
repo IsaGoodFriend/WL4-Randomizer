@@ -38,8 +38,12 @@ namespace WL4_Randomizer
 
         static byte[] buffer;
 
+        public static bool useZips = false;
+
         public static void Main(string[] args)
         {
+            args = new string[] { Directory.GetCurrentDirectory() + "\\WarioLand4Original.gba" };
+
             //Get the options and "Which rooms to randomize" documents
             string optionsPath = Directory.GetCurrentDirectory() + "\\options.txt";
             string rngTest = Directory.GetCurrentDirectory() + "\\rooms.txt";
@@ -62,12 +66,13 @@ namespace WL4_Randomizer
             string oldPath = args[0];
             // Read rom
             buffer = File.ReadAllBytes(args[0]);
-            
-            //DisplayDoorwayData();
+
+            //DisplayDoorwayData(4, 3);
             
             // Get RNG
             Console.WriteLine("Type in your seed now.  Leave blank if you wish to have a seed made for you. ");
-            string s = Console.ReadLine();
+            string s/* = Console.ReadLine()*/;
+            s = ".";
             int seed;
             if (!int.TryParse(s, out seed))
                 seed = s == "" ? (int)DateTime.Now.Ticks : s.GetHashCode();
@@ -77,13 +82,8 @@ namespace WL4_Randomizer
             // Set new rom path
             string newPath = args[0];
             newPath = newPath.Remove(newPath.LastIndexOf('\\') + 1) + "WL4-Randomizer_" + seed + ".gba";
-
-            // Get Room RNG template
-            string[] rooms = File.ReadAllLines(rngTest);
-
-            // Room buffers
-            List<int> indicies1, indicies2, indicies3;
-            int singleIndex;
+            
+            //TODO: Change format to allow individual item picking for randomizer
 
             // Prevent objects from spawning here
             buffer[0x59B17E] = 0x15;
@@ -91,51 +91,12 @@ namespace WL4_Randomizer
             buffer[0x5F152D] = 0x15;
             buffer[0x5F08BE] = 0x15;
 
-            for (int i = 0; i < rooms.Length; i++)
-            {
-                if (rooms[i].Length == 0)
-                    continue;
-                if (rooms[i][0] == 'M')
-                {
-                    indicies1 = new List<int>();
-                    for (int j = 0; j < rooms[i].Length / 9; j++) // Get all rooms
-                    {
-                        s = rooms[i].Substring(j * 9 + 1, 8);
-                        indicies1.Add(Convert.ToInt32(s, 16));
-                    }
-                    i++;
-                    indicies2 = new List<int>();
-                    for (int j = 0; j < (rooms[i].Length + 1) / 9; j++) // Get frog rooms
-                    {
-                        s = rooms[i].Substring(j * 9, 8);
-                        indicies2.Add(Convert.ToInt32(s, 16));
-                    }
-                    i++;
-                    indicies3 = new List<int>();
-                    for (int j = 0; j < (rooms[i].Length + 1) / 9; j++) // Get Chest rooms
-                    {
-                        s = rooms[i].Substring(j * 9, 8);
-                        indicies3.Add(Convert.ToInt32(s, 16));
-                    }
-                    CDLess.ChangeNormal(indicies1.ToArray(), indicies2.ToArray(), indicies3.ToArray(), ref buffer, rngGen);
-                }
-                else if (rooms[i][0] == 'R')
-                {
-                    singleIndex = Convert.ToInt32(rooms[i].Substring(1, 8), 16);
-                    CDLess.Randomize(ref buffer, singleIndex, rngGen);
-                }
-            }
+            PathCreator[] levels = new PathCreator[18];
+            int levelIndex = 0;
 
-            //Reverting entities to normal state when needed
-            buffer[0x59B17E] = 0x07;
-            buffer[0x5F152A] = buffer[0x5F21D4];
-            buffer[0x5F152D] = buffer[0x5F21DA];
-            buffer[0x5F08BE] = 0x07;
 
             // Randomize room locations
-            rooms = File.ReadAllLines(Directory.GetCurrentDirectory() + "\\path.txt");
-
-            PathCreator test;
+            string[] rooms = File.ReadAllLines(Directory.GetCurrentDirectory() + "\\path.txt");
 
             for (int i = 0; i < rooms.Length; i++)
             {
@@ -144,17 +105,171 @@ namespace WL4_Randomizer
 
                 if (rooms[i][0] == 'L')
                 {
-                    test = new PathCreator(ref buffer, byte.Parse(rooms[i][1].ToString()), byte.Parse(rooms[i][2].ToString()), ref rooms, i + 1);
-                    test.CreatePath(rngGen, ref buffer);
+                    if (rooms[i + 1] == "")
+                    {
+                        levelIndex++;
+                        continue;
+                    }
+                    levels[levelIndex] = new PathCreator(ref buffer, byte.Parse(rooms[i][1].ToString()), byte.Parse(rooms[i][2].ToString()), ref rooms, i + 1);
+                    levelIndex++;
                 }
             }
-            
+
+            rooms = File.ReadAllLines(rngTest);
+
+            string[] substring;
+            List<RoomNode> indicies1;
+            List<int[]> frogIndexes, chestIndexes;
+            int romIndex;
+            //TODO: Switch format to add pointers to the rooms on the path rather than to practical outer space
+
+            levelIndex = 0;
+            for (int i = 0; i < rooms.Length; i++)
+            {
+                if (rooms[i].Length == 0)
+                    continue;
+                if (rooms[i][0] == 'M')
+                {
+                    // Problem?
+                    // Current format doesn't allow for individual item picking.
+                    // Most rooms don't need individual picking, though, so I need a way to allow for both.
+                    // Solution?
+                    // Frog switch/chest format will be a list of room indexes.  Any room 
+
+                    indicies1 = new List<RoomNode>();
+                    for (int j = 0; j < rooms[i].Length / 12; j++) // Get all rooms
+                    {
+                        romIndex = int.Parse(rooms[i].Substring(j * 12 + 10, 2));
+
+                        indicies1.Add(levels[levelIndex].rooms[romIndex]);
+                        levels[levelIndex].rooms[romIndex].EntityListIndex = Convert.ToInt32(rooms[i].Substring(j * 12 + 1, 8), 16);
+                    }
+
+                    frogIndexes = new List<int[]>();
+                    chestIndexes = new List<int[]>();
+
+                    // Get frog locations
+                    i++;
+                    substring = rooms[i].Split(',');
+
+                    FillLocationsList(substring, levels[levelIndex], out frogIndexes);
+
+                    // Get chest locations
+                    i++;
+                    substring = rooms[i].Split(',');
+
+                    FillLocationsList(substring, levels[levelIndex], out chestIndexes);
+
+                    CDLess.ChangeNormal(indicies1.ToArray(), frogIndexes.ToArray(), chestIndexes.ToArray(), ref buffer, rngGen, levels[levelIndex]);
+
+                    levelIndex++;
+                }
+            }
+
+            foreach (PathCreator p in levels)
+            {
+                if (p != null) 
+                    p.CreatePath(rngGen, ref buffer);
+            }
+
+            //Reverting entities to normal state when needed
+            buffer[0x59B17E] = 0x07;
+            buffer[0x5F152A] = buffer[0x5F21D4];
+            buffer[0x5F152D] = buffer[0x5F21DA];
+            buffer[0x5F08BE] = 0x07;
+
+            // Shuffle Levels
+            List<byte> bytes = new List<byte>();
+            for (int hallway = 1; hallway < 5; hallway++)
+            {
+                for (int level = 0; level < 4; level++)
+                {
+                    if ((hallway == 0 || hallway == 5) && level > 0)
+                        break;
+
+                    bytes.Add(buffer[PathCreator.LevelIndexLocation + hallway * 24 + level * 4]);
+                }
+            }
+            for (int hallway = 1; hallway < 5; hallway++)
+            {
+                for (int level = 0; level < 4; level++)
+                {
+                    if ((hallway == 0 || hallway == 5) && level > 0)
+                        break;
+
+                    int rng = rngGen.Next(bytes.Count);
+
+                    //buffer[PathCreator.LevelIndexLocation + hallway * 24 + level * 4] = bytes[rng];
+                    bytes.RemoveAt(rng);
+                }
+            }
+
             File.WriteAllBytes(newPath, buffer);
         }
 
-        private static void DisplayRoomData()
+        private static int[][] offsets = new int[][] { new int[] { 1, 2, 3, 4 }, new int[] { 5, 6, 7, 8 }, new int[] { 9, 10, 11, 12 }, new int[] { 13, 14, 16, 15 }, };
+
+        public static void FillLocationsList(string[] substring, PathCreator level, out List<int[]> temp)
         {
-            int index = 0x3F2F88;
+            temp = new List<int[]>();
+            int romIndex, count;
+
+            // Foreach subsection
+            for (int j = 0; j < substring.Length; j++)
+            {
+                //Format for picking individual items (useful for preventing items from spawning in the wrong location, and keeping items located in the right subroom)
+                if (substring[j].Contains("-"))
+                {
+                    int roomIndex = int.Parse(substring[j].Split('-')[0]); // Get the room index
+                    romIndex = level.rooms[roomIndex].EntityListIndex + 2; // Entity list index
+
+                    count = 0;
+                    while (buffer[romIndex] != 0xFF)
+                    {
+                        if (buffer[romIndex] < 0x10 && count++ == int.Parse(substring[j].Split('-')[1]))
+                        {
+                            temp.Add(new int[] { romIndex, roomIndex, int.Parse(substring[j].Split('-')[2]) } );
+                            break;
+                        }
+                        romIndex += 3;
+                    }
+                }
+                else
+                {
+                    int levelIndex = int.Parse(substring[j]); // Get the room index
+                    romIndex = level.rooms[int.Parse(substring[j])].EntityListIndex + 2; // Entity list index
+
+                    while (buffer[romIndex] != 0xFF)
+                    {
+                        if (buffer[romIndex] < 0x10)
+                        {
+                            temp.Add(new int[] { romIndex, levelIndex, 0 }); // Add each entity to list, assuming all are contained in one sub room
+                        }
+                        romIndex += 3;
+                    }
+                }
+            }
+        }
+
+        public static int LevelOffset(int hall, int level)
+        {
+            if (hall == 0)
+            {
+                return 0;
+            }
+            else if (hall == 5)
+            {
+                return 23;
+            }
+            else
+            {
+                return offsets[hall][level];
+            }
+        }
+
+        private static void DisplayDoorwayData(int hall, int level)
+        {
+            int index = GetPointer(PathCreator.DoorTableLocation + (buffer[LevelOffset(hall, level)]) * 4);
             int count = 0;
             int levelCount = 0;
             byte maxRoom = 0;
@@ -194,9 +309,7 @@ namespace WL4_Randomizer
             fileTest.Add(levelCount.ToString());
 
             File.WriteAllLines(Directory.GetCurrentDirectory() + "\\test.txt", fileTest.ToArray());
-
-            Console.ReadKey();
-
+            
             return;
         }
 
@@ -216,20 +329,15 @@ namespace WL4_Randomizer
     }
     class CDLess
     {
-        public static void ChangeNormal(int[] rooms, int[] frog, int[] chests, ref byte[] rom, Random rng, bool hasCD = true)
+        public static void ChangeNormal(RoomNode[] rooms, int[][] frog, int[][] chests, ref byte[] rom, Random rng, PathCreator level, bool hasCD = true)
         {
-            List<int> possiblities = new List<int>();
-            for (int i = 0; i < chests.Length; i++)
-            {
-                possiblities.Add(i);
-            } 
 
             int buffer = 0;
             int index = 0;
 
             for (int i = 0; i < rooms.Length; i++) // Clear levels
             {
-                index = rooms[i] + 2;
+                index = rooms[i].EntityListIndex + 2;
 
                 while (rom[index] != 0xFF) // Check every entity in list
                 {
@@ -240,26 +348,19 @@ namespace WL4_Randomizer
                     index += 3;
                 }
             }
-
-            bool loopOn = true;
-            while (loopOn)
+            
+            if (frog.Length != 0)
             {
-                if (frog.Length == 0)
-                    break;
-
                 index = rng.Next(0, frog.Length);
 
-                index = frog[index] + 2;
-                while (rom[index] != 0xFF)
-                {
-                    if (rom[index] == 0x07)
-                    {
-                        loopOn = false;
-                        rom[index] = 0x08;
-                        break;
-                    }
-                    index += 3;
-                }
+                rom[frog[index][0]] = 0x08;
+                level.rooms[frog[index][1]].subrooms[frog[index][2]].itemsContained |= ItemFound.Frog;
+            }
+
+            List<int> possiblities = new List<int>();
+            for (int i = 0; i < chests.Length; i++)
+            {
+                possiblities.Add(i);
             }
 
             for (int i = 0; i < 6; i++) // Chests
@@ -268,37 +369,30 @@ namespace WL4_Randomizer
                     break;
                 if (!hasCD && i == 4)
                     continue;
-
-                loopOn = true;
-                buffer = rng.Next(possiblities.Count);
-
-                index = possiblities[buffer];
-                index = chests[index] + 2;
-
-                while (rom[index] != 0xFF)
+                
+                while (true)
                 {
-                    if (rom[index] == 0x07 && !(rom[index - 2] == 0x8 && rom[index-1] == 0x34 && index == 0x5CEDE3))
-                    {
-                        rom[index] = (byte)(i + 1);
-                        loopOn = false;
-                        break;
-                    }
-                    index += 3;
+                    buffer = rng.Next(possiblities.Count);
 
-                }
+                    index = possiblities[buffer];
 
-                if (loopOn)
-                    i--;
-                else
+                    if (rom[chests[index][0]] != 0x07)
+                        continue;
+
+                    rom[chests[index][0]] = (byte)(i + 1);
+
                     possiblities.RemoveAt(buffer);
+                    break;
+                }
             }
 
             List<int> potentials = new List<int>();
 
-            loopOn = true;
+            bool loopOn = true;
             while (loopOn)
             {
-                index = rooms[rng.Next(0, rooms.Length)] + 2;
+                index = rooms[rng.Next(0, rooms.Length)].EntityListIndex + 2;
+
                 while (rom[index] != 0xFF)
                 {
                     if (rom[index] == 0x07)

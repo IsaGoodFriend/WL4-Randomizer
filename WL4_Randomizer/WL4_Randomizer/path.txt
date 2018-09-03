@@ -1,5 +1,38 @@
 -headerIndex = 0x6391C4 + passage * 24 + level * 4 // Toy = 4
 -levelLocation = 0x639068 + headerIndex * 12
 
+-Door,HallLeft,Pit,PipeTop
+
 -Hall
 L00
+0,1
+0,0
+0,0
+0,0
+0,0
+0,0
+0,0
+0,0
+0,1
+0,0
+0,0
+1,0,0,1
+0,0
+C,21,-2
+C,25,3
+C,26,3
+B,4,128
+B,8,128
+B,10,128
+B,12,128
+B,16,128
+B,1,65536
+B,21,65536
+S,8,0,1,0
+S,0,0,1,0
+S,0,1,0,0
+
+-Hotel
+-L43
+
+End
