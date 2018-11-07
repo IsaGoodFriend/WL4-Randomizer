@@ -12,3 +12,8 @@ WL4_Randomizer/WL4_Randomizer.sln
 WL4_Randomizer/WL4_Randomizer/WL4_Randomizer.csproj
 WL4_Randomizer/WL4_Randomizer/WL4_Randomizer.csproj.user
 WL4_Randomizer/WL4_Randomizer/WL4_Randomizer.csproj.user
+*.cache
+*.lock
+*.ide
+*.ide-shm
+*.ide-wal
