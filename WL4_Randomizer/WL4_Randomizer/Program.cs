@@ -72,7 +72,7 @@ namespace WL4_Randomizer
             // Get RNG
             Console.WriteLine("Type in your seed now.  Leave blank if you wish to have a seed made for you. ");
             string s/* = Console.ReadLine()*/;
-            s = ".";
+            s = "";
             int seed;
             if (!int.TryParse(s, out seed))
                 seed = s == "" ? (int)DateTime.Now.Ticks : s.GetHashCode();
@@ -81,15 +81,12 @@ namespace WL4_Randomizer
 
             // Set new rom path
             string newPath = args[0];
-            newPath = newPath.Remove(newPath.LastIndexOf('\\') + 1) + "WL4-Randomizer_" + seed + ".gba";
+            newPath = newPath.Remove(newPath.LastIndexOf('\\') + 1) + "WL4-Randomizer_" + "Test" + ".gba";
             
-            //TODO: Change format to allow individual item picking for randomizer
 
             // Prevent objects from spawning here
-            buffer[0x59B17E] = 0x15;
             buffer[0x5F152A] = 0x15;
             buffer[0x5F152D] = 0x15;
-            buffer[0x5F08BE] = 0x15;
 
             PathCreator[] levels = new PathCreator[18];
             int levelIndex = 0;
@@ -121,7 +118,6 @@ namespace WL4_Randomizer
             List<RoomNode> indicies1;
             List<int[]> frogIndexes, chestIndexes;
             int romIndex;
-            //TODO: Switch format to add pointers to the rooms on the path rather than to practical outer space
 
             levelIndex = 0;
             for (int i = 0; i < rooms.Length; i++)
@@ -173,10 +169,8 @@ namespace WL4_Randomizer
             }
 
             //Reverting entities to normal state when needed
-            buffer[0x59B17E] = 0x07;
             buffer[0x5F152A] = buffer[0x5F21D4];
             buffer[0x5F152D] = buffer[0x5F21DA];
-            buffer[0x5F08BE] = 0x07;
 
             // Shuffle Levels
             List<byte> bytes = new List<byte>();

@@ -62,13 +62,17 @@ namespace WL4_Randomizer
 
                 path.Add(new PathNode(romIndex, type, romReference[romIndex + 6] - 1));
 
+                if (path[path.Count - 1].connectedNodeIndex == -1)
+                {
+                    path[path.Count - 1].blockType = PathBlockType.Impassable;
+                }
+
                 index += 12;
             }
 
             rooms = new RoomNode[roomMax + 1];
             string[] substring;
-
-            //TODO: Add subrooms to each room, and put doorways in those subrooms.
+            
 
             for (int i = 0; i <= roomMax; i++) // Foreach room
             {
@@ -101,6 +105,8 @@ namespace WL4_Randomizer
 
             fileOffset += roomMax + 1;
 
+            List<int> remove = new List<int>();
+
             while (file[fileOffset] != "" && file[fileOffset][0] != '/')
             {
                 substring = file[fileOffset].Split(',');
@@ -113,6 +119,14 @@ namespace WL4_Randomizer
                 {
                     path[int.Parse(substring[1])].blockType = (PathBlockType)(int.Parse(substring[2]));
                 }
+                else if (substring[0] == "K")
+                {
+                    path[int.Parse(substring[1])].Exclude = true;
+                }
+                else if (substring[0] == "R")
+                {
+                    rooms[int.Parse(substring[1])].Exclude = true;
+                }
                 else if (substring[0] == "S")
                 {
                     // Take the room from the second value, find the subroom from the third value, and add a connection to the subroom in the same main room at the index at the fourth value
@@ -121,58 +135,101 @@ namespace WL4_Randomizer
                 fileOffset++;
             }
 
+            if (hall == 1 && level == 0)
+            {
+                bool stop = false;
+                for (int i = 0; i < path.Count; i++)
+                {
+                    if (path[i].Exclude)
+                    {
+                        foreach (RoomNode main in rooms)
+                        {
+                            foreach (RoomSubsection sub in main.subrooms)
+                            {
+                                sub.doorWays.Remove(path[i]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            roomExclusive = new List<RoomNode>(rooms);
+            for (int i = 0; i < rooms.Length; i++)
+            {
+                if (path[i].Exclude)
+                {
+                    roomExclusive.Remove(rooms[i]);
+                }
+            }
+
             rooms[0].subrooms[0].itemsContained |= ItemFound.Portal;
         }
 
+        List<RoomNode> roomExclusive;
+        List<PathNode> pathExclusive;
+
         public void CreatePath(Random rng, ref byte[] rom)
         {
-            List<PathNode> test = new List<PathNode>(path);
-            List<PathNode> test2 = new List<PathNode>(path);
+            pathExclusive = new List<PathNode>(path);
+            //List<PathNode> test2 = new List<PathNode>(path);
+            for (int i = 0; i < pathExclusive.Count; i++)
+            {
+                if (path[i].Exclude)
+                {
+                    pathExclusive.Remove(path[i]);
+                }
+            }
+            List<PathNode> test = new List<PathNode>(pathExclusive);
 
             bool isSafe = false;
 
-            //TODO: Test Pre frog locations for frog switch.
-            //TODO: Test Post frog locations for Portal
-
-            while (test.Count > 0)
+            while (!isSafe)
             {
-                int randomDoor = rng.Next(test.Count - 1) + 1;
-                
-                //Grab a random door, and if it's the right type for the first in the lists, connect and remove from the list
-                if ((int)test[0].pathType == -(int)(test[randomDoor].pathType))
+                if (test.Count > 0)
                 {
-                    if (test[0].connectedNodeIndex >= 0) //only connect if door should be connected
-                    {
-                        test[0].connectedNodeIndex = path.IndexOf(test[randomDoor]);
-                    }
-                    if (test[randomDoor].connectedNodeIndex >= 0) //only connect if door should be connected
-                    {
-                        test[randomDoor].connectedNodeIndex = path.IndexOf(test[0]);
-                    }
-                    test.RemoveAt(randomDoor);
-                    test.RemoveAt(0);
-                }
+                    int randomDoor = rng.Next(test.Count - 1) + 1;
 
-                if (test.Count == 0) // After all rooms have been randomized
+                    //Grab a random door, and if it's the right type for the first in the lists, connect and remove from the list
+                    if ((int)test[0].pathType == -(int)(test[randomDoor].pathType))
+                    {
+                        if (test[0].connectedNodeIndex >= 0) //only connect if door should be connected
+                        {
+                            test[0].connectedNodeIndex = path.IndexOf(test[randomDoor]);
+                        }
+                        if (test[randomDoor].connectedNodeIndex >= 0) //only connect if door should be connected
+                        {
+                            test[randomDoor].connectedNodeIndex = path.IndexOf(test[0]);
+                        }
+                        test.RemoveAt(randomDoor);
+                        test.RemoveAt(0);
+                    }
+                }
+                else // After all rooms have been randomized
                 {
                     //Temp list to trace path
                     PathNode issue = null;
-                    isSafe = TestPath(rng, ref issue);
+                    isSafe = TestPath(rng, out issue);
 
                     if (!isSafe)
                     {
-                        test.Add(issue);
-                        test.Add(path[issue.connectedNodeIndex]);
-
                         while (true)
                         {
-                            randomDoor = rng.Next(0, path.Count);
-                            if (!test.Contains(path[randomDoor]))
+                            PathNode randomPath = pathExclusive[rng.Next(0, pathExclusive.Count)];
+                            if (path.Contains(randomPath) && !test.Contains(randomPath) && randomPath.connectedNodeIndex != -1)
                             {
-                                if (Math.Abs((int)path[randomDoor].pathType) == Math.Abs((int)issue.pathType))
+                                if (Math.Abs((int)randomPath.pathType) == Math.Abs((int)issue.pathType))
                                 {
-                                    test.Add(path[randomDoor]);
-                                    test.Add(path[path[randomDoor].connectedNodeIndex]);
+                                    if (rng.Next(2) == 0)
+                                    {
+                                        randomPath.connectedNodeIndex = path.IndexOf(issue);
+                                        path[randomPath.connectedNodeIndex].connectedNodeIndex = issue.connectedNodeIndex;
+                                    }
+                                    else
+                                    {
+                                        randomPath.connectedNodeIndex = issue.connectedNodeIndex;
+                                        path[randomPath.connectedNodeIndex].connectedNodeIndex = path.IndexOf(issue);
+                                    }
+
                                     break;
                                 }
                             }
@@ -183,35 +240,34 @@ namespace WL4_Randomizer
                 }
             }
 
-            foreach (PathNode node in path)
+            foreach (PathNode node in pathExclusive)
             {
                 rom[node.doorIndex + 6] = (byte)(node.connectedNodeIndex + 1);
             }     
         }
 
-        private bool TestPath(Random rng, ref PathNode issue)
+        private bool TestPath(Random rng, out PathNode issue)
         {
-            bool isSafe;
+            issue = null;
+            
             LinkedList<RoomSubsection> roomPath = new LinkedList<RoomSubsection>();
-            List<PathNode> fixedPaths = new List<PathNode>();
+            List<PathNode> safePaths = new List<PathNode>();
             PathBlockType blockType = PathBlockType.Impassable;
 
             if (!Program.useZips)
                 blockType |= PathBlockType.Zip;
 
-            isSafe = CheckPathSoftlocks(rooms[0].subrooms[0], roomPath, fixedPaths, ref issue);
-
-            if (!isSafe)
+            if (!CheckPathSoftlocks(roomExclusive[0].subrooms[0], roomPath, safePaths, ref issue))
                 return false;
             
             //Check to see if all rooms are connected
             List<RoomSubsection> roomsNotFound = new List<RoomSubsection>();
-            foreach (RoomNode r in rooms)
+            foreach (RoomNode r in roomExclusive)
             {
                 roomsNotFound.AddRange(r.subrooms);
             }
             ItemFound found = ItemFound.None;
-            CheckPathOneWeb(rooms[0].subrooms[0], roomPath, roomsNotFound, blockType, ref found);
+            CheckPathOneWeb(roomExclusive[0].subrooms[0], roomPath, roomsNotFound, blockType, ref found);
 
             // If room has not been found, restart
             if (roomsNotFound.Count > 0)
@@ -222,14 +278,8 @@ namespace WL4_Randomizer
             }
 
             RoomSubsection frog = null;
-            // Refill room list
-            foreach (RoomNode r in rooms)
-            {
-                roomsNotFound.AddRange(r.subrooms);
-            }
-
             roomsNotFound = new List<RoomSubsection>();
-            foreach (RoomNode r in rooms)
+            foreach (RoomNode r in roomExclusive)
             {
                 foreach (RoomSubsection sub in r.subrooms)
                 {
@@ -250,12 +300,8 @@ namespace WL4_Randomizer
             found = ItemFound.None;
             roomPath = new LinkedList<RoomSubsection>();
             roomsNotFound = new List<RoomSubsection>();
-            foreach (RoomNode r in rooms)
-            {
-                roomsNotFound.AddRange(r.subrooms);
-            }
 
-            CheckPathOneWeb(rooms[0].subrooms[0], roomPath, roomsNotFound, blockType, ref found);
+            CheckPathOneWeb(roomExclusive[0].subrooms[0], roomPath, roomsNotFound, blockType, ref found);
 
             if ((found & ItemFound.Frog) == ItemFound.None) // If didn't find frog reset
             {
@@ -263,11 +309,15 @@ namespace WL4_Randomizer
 
                 return false;
             }
-
+            
             blockType -= PathBlockType.FrogSwitchPre;
             blockType |= PathBlockType.FrogSwitchPost;
             found -= ItemFound.Portal;
             roomPath = new LinkedList<RoomSubsection>();
+            foreach (RoomNode r in roomExclusive)
+            {
+                roomsNotFound.AddRange(r.subrooms);
+            }
 
             CheckPathOneWeb(frog, roomPath, roomsNotFound, blockType, ref found);
 
@@ -277,6 +327,40 @@ namespace WL4_Randomizer
 
                 return false;
             }
+
+            RoomSubsection noLocking = null;
+
+            blockType -= PathBlockType.FrogSwitchPost;
+
+            foreach (RoomNode r in roomExclusive)
+            {
+                foreach (RoomSubsection sub in r.subrooms)
+                {
+                    roomPath = new LinkedList<RoomSubsection>();
+                    found = ItemFound.None;
+
+                    if (!CheckPathLockInRoom(sub, roomPath, blockType, ref found))
+                        noLocking = sub;
+                }
+                if (noLocking != null)
+                    break;
+            }
+
+            if (noLocking != null)
+            {
+                foreach (RoomNode r in roomExclusive)
+                {
+                    roomsNotFound.AddRange(r.subrooms);
+                }
+                roomsNotFound.Remove(noLocking);
+                issue = noLocking.doorWays[0];
+
+                GetIssueDoorRandom(ref issue, rng, roomsNotFound);
+                return false;
+            }
+
+            roomPath = new LinkedList<RoomSubsection>();
+            CheckPathOneWeb(roomExclusive[0].subrooms[0], roomPath, roomsNotFound, blockType, ref found);
 
             return true;
         }
@@ -294,6 +378,9 @@ namespace WL4_Randomizer
 
                 for (int i = 0; i < path.Count; i++)
                 {
+                    if (path[i].Exclude)
+                        continue;
+
                     if (path[i] != issue && i != issue.connectedNodeIndex && Math.Abs((int)path[i].pathType) == Math.Abs((int)issue.pathType))
                     {
                         loop = false;
@@ -315,8 +402,6 @@ namespace WL4_Randomizer
             
             foreach (PathNode n in roomSub.doorWays) // Check each path if safe
             {
-                int currentIndex = path.IndexOf(n);
-
                 if (n.blockType != PathBlockType.Impassable) // If the pathway isn't impassable and the room hasn't been on the path already, 
                 {
                     if (n.blockType == PathBlockType.BreakBlock_SoftLock)
@@ -365,8 +450,6 @@ namespace WL4_Randomizer
 
             foreach (PathNode n in roomSub.doorWays) // Check each path if safe
             {
-                int currentIndex = path.IndexOf(n);
-
                 if ((n.blockType & blocks) == PathBlockType.None) // If the pathway isn't impassable and the room hasn't been on the path already, 
                 {
                     CheckPathOneWeb(path[n.connectedNodeIndex].subroom, tracingPath, hasntFound, blocks, ref found);
@@ -376,12 +459,45 @@ namespace WL4_Randomizer
                     if ((sub.issue & blocks) == PathBlockType.None)
                     {
                         CheckPathOneWeb(sub.nextRoom, tracingPath, hasntFound, blocks, ref found);
-                        break;
                     }
                 }
             }
 
             tracingPath.Remove(roomSub);
+        }
+        public bool CheckPathLockInRoom(RoomSubsection roomSub, LinkedList<RoomSubsection> tracingPath, PathBlockType blocks, ref ItemFound found)
+        {
+            found |= roomSub.itemsContained;
+
+            if (found != ItemFound.None)
+                return true;
+
+            if (tracingPath.Contains(roomSub))
+                return false;
+
+            tracingPath.AddLast(roomSub); // Add subroom to not retrace steps
+            
+
+            foreach (PathNode n in roomSub.doorWays) // Check each path if safe
+            {
+                if ((n.blockType & blocks) == PathBlockType.None) // If the pathway isn't impassable and the room hasn't been on the path already, 
+                {
+                    if (CheckPathLockInRoom(path[n.connectedNodeIndex].subroom, tracingPath, blocks, ref found))
+                        return true;
+                }
+                foreach (SubroomConnection sub in n.subroom.connections)
+                {
+                    if ((sub.issue & blocks) == PathBlockType.None)
+                    {
+                        if (CheckPathLockInRoom(sub.nextRoom, tracingPath, blocks, ref found))
+                            return true;
+                    }
+                }
+            }
+            
+            tracingPath.Remove(roomSub);
+
+            return false;
         }
     }
 
@@ -437,6 +553,7 @@ namespace WL4_Randomizer
         public PathBlockType blockType;
         public int connectedNodeIndex;
         public RoomSubsection subroom;
+        public bool Exclude = false;
 
         public int doorIndex;
 
@@ -447,11 +564,12 @@ namespace WL4_Randomizer
             connectedNodeIndex = _nodeIndex;
         }
     }
-    //TODO: Add information to tell what's contained in each room.  Also add pointer to entity list.  Each item should have an index to the subroom it's contained in
+
     class RoomNode
     {
         public int EntityListIndex;
         public List<RoomSubsection> subrooms;
+        public bool Exclude = false;
 
         public RoomNode(params RoomSubsection[] rooms)
         {
