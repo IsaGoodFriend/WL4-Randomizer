@@ -40,20 +40,22 @@ namespace WL4_Randomizer
 
         public static bool useZips = false;
 
+        private static int TXT_ROOM_LENGTH = 10;
+
         public static void Main(string[] args)
         {
             args = new string[] { Directory.GetCurrentDirectory() + "\\WarioLand4Original.gba" };
 
             //Get the options and "Which rooms to randomize" documents
             string optionsPath = Directory.GetCurrentDirectory() + "\\options.txt";
-            string rngTest = Directory.GetCurrentDirectory() + "\\rooms.txt";
+            string roomInfoPath = Directory.GetCurrentDirectory() + "\\rooms.txt";
 
             if (!File.Exists(optionsPath)) // Recreate options page if gone
             {
                 File.Create(optionsPath).Close();
                 options = new string[] { Directory.GetCurrentDirectory(), "True" };
             }
-            if (!File.Exists(rngTest)) // Unable to recreate room page.  Too much data to put into text
+            if (!File.Exists(roomInfoPath)) // If not able to find room info, return.  Unable to recreate room page.  Too much data to put into text
             {
                 return;
             }
@@ -71,7 +73,7 @@ namespace WL4_Randomizer
             
             // Get RNG
             Console.WriteLine("Type in your seed now.  Leave blank if you wish to have a seed made for you. ");
-            string s/* = Console.ReadLine()*/;
+            string s = Console.ReadLine();
             s = "";
             int seed;
             if (!int.TryParse(s, out seed))
@@ -83,15 +85,13 @@ namespace WL4_Randomizer
             string newPath = args[0];
             newPath = newPath.Remove(newPath.LastIndexOf('\\') + 1) + "WL4-Randomizer_" + "Test" + ".gba";
             
-
             // Prevent objects from spawning here
             buffer[0x5F152A] = 0x15;
             buffer[0x5F152D] = 0x15;
 
             PathCreator[] levels = new PathCreator[18];
             int levelIndex = 0;
-
-
+            
             // Randomize room locations
             string[] rooms = File.ReadAllLines(Directory.GetCurrentDirectory() + "\\path.txt");
 
@@ -112,7 +112,7 @@ namespace WL4_Randomizer
                 }
             }
 
-            rooms = File.ReadAllLines(rngTest);
+            rooms = File.ReadAllLines(roomInfoPath);
 
             string[] substring;
             List<RoomNode> indicies1;
@@ -126,19 +126,13 @@ namespace WL4_Randomizer
                     continue;
                 if (rooms[i][0] == 'M')
                 {
-                    // Problem?
-                    // Current format doesn't allow for individual item picking.
-                    // Most rooms don't need individual picking, though, so I need a way to allow for both.
-                    // Solution?
-                    // Frog switch/chest format will be a list of room indexes.  Any room 
-
                     indicies1 = new List<RoomNode>();
-                    for (int j = 0; j < rooms[i].Length / 12; j++) // Get all rooms
+                    for (int j = 0; j < rooms[i].Length / TXT_ROOM_LENGTH; j++) // Get all rooms
                     {
-                        romIndex = int.Parse(rooms[i].Substring(j * 12 + 10, 2));
+                        romIndex = int.Parse(rooms[i].Substring(j * TXT_ROOM_LENGTH + 8, 2));
 
                         indicies1.Add(levels[levelIndex].rooms[romIndex]);
-                        levels[levelIndex].rooms[romIndex].EntityListIndex = Convert.ToInt32(rooms[i].Substring(j * 12 + 1, 8), 16);
+                        levels[levelIndex].rooms[romIndex].EntityListIndex = Convert.ToInt32("0x" + rooms[i].Substring(j * TXT_ROOM_LENGTH + 1, 6), 16);
                     }
 
                     frogIndexes = new List<int[]>();
@@ -160,12 +154,6 @@ namespace WL4_Randomizer
 
                     levelIndex++;
                 }
-            }
-
-            foreach (PathCreator p in levels)
-            {
-                if (p != null) 
-                    p.CreatePath(rngGen, ref buffer);
             }
 
             //Reverting entities to normal state when needed
@@ -259,52 +247,6 @@ namespace WL4_Randomizer
             {
                 return offsets[hall][level];
             }
-        }
-
-        private static void DisplayDoorwayData(int hall, int level)
-        {
-            int index = GetPointer(PathCreator.DoorTableLocation + (buffer[LevelOffset(hall, level)]) * 4);
-            int count = 0;
-            int levelCount = 0;
-            byte maxRoom = 0;
-
-            List<string> fileTest = new List<string>();
-            string str = "";
-
-            fileTest.Add("LTF	RID	X1	X2	Y1	Y2	LDs	XDp	YDp	ETb	BG1	BG2");
-
-            while (buffer[index] <= 0x06)
-            {
-                if (buffer[index] >= 0x00)
-                {
-                    for (int i = 0; i < 12; i++)
-                    {
-                        str += buffer[index + i].ToString("D3") + " ";
-                    }
-
-                    if (buffer[index] > 0x00)
-                    {
-                        str = str.Remove(str.Length - 1);
-                        count++;
-                        maxRoom = Math.Max(buffer[index + 1], maxRoom);
-                    }
-                    else
-                    {
-                        str += count + " " + maxRoom;
-                        count = 0;
-                        maxRoom = 0;
-                        levelCount++;
-                    }
-                    fileTest.Add(str);
-                    str = "";
-                }
-                index += 12;
-            }
-            fileTest.Add(levelCount.ToString());
-
-            File.WriteAllLines(Directory.GetCurrentDirectory() + "\\test.txt", fileTest.ToArray());
-            
-            return;
         }
 
         // General:
