@@ -12,3 +12,11 @@ WL4_Randomizer/WL4_Randomizer.sln
 WL4_Randomizer/WL4_Randomizer/WL4_Randomizer.csproj
 WL4_Randomizer/WL4_Randomizer/WL4_Randomizer.csproj.user
 WL4_Randomizer/WL4_Randomizer/WL4_Randomizer.csproj.user
+*.config
+.vs/WL4_Randomizer/v15/.suo
+*.lock
+*.ide
+WL4_Randomizer/WL4_Randomizer/Properties/AssemblyInfo.cs
+WL4_Randomizer/WL4_Randomizer/App.config
+*.ide-shm
+*.ide-wal
