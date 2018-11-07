@@ -18,5 +18,10 @@ WL4_Randomizer/WL4_Randomizer/WL4_Randomizer.csproj.user
 *.ide
 WL4_Randomizer/WL4_Randomizer/Properties/AssemblyInfo.cs
 WL4_Randomizer/WL4_Randomizer/App.config
+=======
+*.cache
+*.lock
+*.ide
+>>>>>>> af0135fbbe459da30b9e6bd4c320c9ee8859d6bf
 *.ide-shm
 *.ide-wal
