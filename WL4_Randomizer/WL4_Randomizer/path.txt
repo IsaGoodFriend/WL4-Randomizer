@@ -3,6 +3,18 @@
 
 -Door,HallLeft,Pit,PipeTop
 
+-- Notes:
+- Each door must know how many other exits the room has, and if it's blocked by the frog block
+- Take the first room, pick one door in it.
+- Pick a random door that matches and connect them.
+--- Softlock booleans needed: B1-(Is there another path that can be lead into), B2-(Is there another path that can be used)
+--- Do not pick a dead end door until you have an extra path to return to (B2).
+--- While no other paths are available (B1), check backwards for soft locks
+- Add any extra door ways not established yet (B2).
+- Check for softlocks
+
+- 
+
 -Hall
 L00
 0,1
@@ -35,27 +47,25 @@ S,0,1,0,0
 -Palm
 L10
 0
-0
+-1
 0,0
 0,0,0,0
 0,0,0
-0,0,0,0,0
+0,0,-1,-1,0
+0,-1
 0,0
-0,0
-0,0
+-1,-1
 0,0
 0
 0
-B,18,65536
 C,23,3
 C,20,3
 C,25,3
 C,18,-2
-K,1
-K,21
-R,1
 
 -WildFlower
+L11
+
 
 -Hotel
 -L43
