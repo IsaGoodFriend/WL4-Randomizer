@@ -100,8 +100,6 @@ namespace WL4_Randomizer
                 int type = Program.romBuffer[romIndex + 2];
                 if (type < 0xF)
                 {
-                    Program.romBuffer[romIndex + 1] += 1;
-                    Program.romBuffer[romIndex] += 1;
                     retVal.Add(new EntityInfo(romIndex, EntityType.BigGem, Program.romBuffer[romIndex + 1], Program.romBuffer[romIndex], retVal.Count, Program.romBuffer[romIndex + 2]));
                 }
             }
