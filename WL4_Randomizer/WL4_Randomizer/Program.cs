@@ -160,11 +160,12 @@ namespace WL4_Randomizer
                 PathCreator.CreatePath(passage, level, node);
             }
 
-            RandomizeLevels();
+            //RandomizeLevels();
+            romBuffer[PathCreator.LevelHeaderIndexLocation] = 0x16;
 
             Console.WriteLine("Writing to " + directory + "\\" + RandomizedRomPath);
             File.WriteAllBytes(directory + "\\" + RandomizedRomPath, romBuffer);
-            Console.WriteLine("Written to " + directory + "\\" + RandomizedRomPath);
+            Console.WriteLine("Randomized rom saved.");
             Console.ReadLine();
         }
 
@@ -185,8 +186,21 @@ namespace WL4_Randomizer
             OriginalRomPath = args[0].Remove(0, directory.Length+1);
 
             if (!File.Exists(args[0])) return;
-            inputs = File.ReadAllLines(directory + "\\input.txt");
 
+            Console.WriteLine("Do you want to use your previous settings?");
+
+            string s = Console.ReadLine().ToLower();
+
+            if (s == "y" || s == "yes" || s == "yes." || s == "1")
+            {
+                inputs = File.ReadAllLines(directory + "\\input.txt");
+            }
+            else
+            {
+                inputs = new string[] { };
+                File.WriteAllLines(directory + "\\input.txt", inputs);
+            }
+            
             Console.WriteLine("Do you want to create a randomized rom? y/n");
 
             bool createRandomizer = GetBoolFromUser(true);
@@ -211,8 +225,8 @@ namespace WL4_Randomizer
             Console.WriteLine();
 
             MakeCopy(OriginalRomPath, RandomizedRomPath, PatchPath);
-            romBuffer = File.ReadAllBytes(directory + "\\" + RandomizedRomPath);
             Console.ReadLine();
+            romBuffer = File.ReadAllBytes(directory + "\\" + RandomizedRomPath);
             Console.Clear();
 
             if (!createRandomizer)
@@ -227,6 +241,17 @@ namespace WL4_Randomizer
 
         private static string[] inputs;
         private static int inputIndex;
+        public static void WriteToFile(string logMessage, string logFile)
+        {
+            logFile = directory + "\\" + logFile + ".txt";
+            if (!File.Exists(logFile))
+                File.Create(logFile).Close();
+
+            List<string> newFile = new List<string>(File.ReadAllLines(logFile));
+            newFile.Add(logMessage);
+
+            File.WriteAllLines(logFile, newFile.ToArray());
+        }
         public static string ReadLine()
         {
             if (inputs != null)
@@ -248,13 +273,19 @@ namespace WL4_Randomizer
             }
             string s = Console.ReadLine();
             
-            if (inputIndex >= inputs.Length)
+            if (inputIndex >= inputs.Length/* && inputs.Length > 0*/)
             {
-                List<string> newFile = new List<string>(File.ReadAllLines(directory + "\\input.txt"));
-                newFile.Add(s);
-                File.WriteAllLines(directory + "\\input.txt", newFile.ToArray());
+                WriteToFile(s, "input");
             }
             return s;
+        }
+        public static void DebugLog(object obj)
+        {
+            Console.WriteLine(obj.ToString());
+        }
+        public static void DebugLog(string s, params object[] args)
+        {
+            Console.WriteLine(s, args);
         }
         public static bool GetBoolFromUser(bool defaultAnswer)
         {
@@ -326,7 +357,7 @@ namespace WL4_Randomizer
                 {
                     for (int level = 0; level < (passage == 0 || passage == 5 ? 1 : 4); level++)
                     {
-                        Console.Write("Starting Level " + passage + " - " + level + ".  Do you wish randomize this level? ");
+                        Console.Write("Starting Level " + passage + " - " + (level + 1) + ".  Do you wish randomize this level? ");
                         if (!GetBoolFromUser(true))
                         {
                             Console.Clear();
@@ -339,7 +370,12 @@ namespace WL4_Randomizer
                         doc.WriteStartElement("level_" + passage + "_" + level);
 
                         // Get the start of the level's doorway array
-                        int doorArrayIndex = GetPointer(PathCreator.DoorTableLocation + GetLevelIndex(passage, level) * 4);
+                        int levelIndex = GetLevelIndex(passage, level);
+                        DebugLog(passage + ", " + level + ", " + levelIndex.ToString("X"));
+                        int doorArrayIndex = GetPointer(PathCreator.DoorTableLocation + levelIndex * 4);
+
+                        DebugLog(romBuffer[doorArrayIndex]);
+
                         int currentDoor = 1;
                         while (romBuffer[doorArrayIndex + currentDoor * 12] != 0x00)
                         {
@@ -347,7 +383,7 @@ namespace WL4_Randomizer
                             Console.Clear();
                         }
 
-                        Console.WriteLine("Do you want to make any extra connections between rooms?");
+                        Console.WriteLine("Do you want to make any extra connections between rooms?  (format is \"VanillaRoomIndex-SubroomName\")");
                         List<RoomConnection> roomConnections = new List<RoomConnection>();
 
                         if (GetBoolFromUser(true))
@@ -371,12 +407,36 @@ namespace WL4_Randomizer
                                     {
                                         roomTwo = rooms[second];
                                     }
-                                    
+
+                                }
+                                if (roomOne == null && first.Split('-').Length > 1)
+                                {
+                                    Console.WriteLine(first + " does not exist.  Do you wish to create it?");
+                                    if (GetBoolFromUser(true))
+                                    {
+                                        int value = int.Parse(first.Split('-')[0]);
+                                        vanillaRooms[value].Add(first);
+                                        rooms.Add(first, roomOne = new RoomInfo(first));
+                                    }
+                                }
+                                if (roomTwo == null && second.Split('-').Length > 1)
+                                {
+                                    Console.WriteLine(second + " does not exist.  Do you wish to create it?");
+                                    if (GetBoolFromUser(true))
+                                    {
+                                        int value = int.Parse(second.Split('-')[0]);
+                                        vanillaRooms[value].Add(second);
+                                        rooms.Add(second, roomTwo = new RoomInfo(second));
+                                    }
                                 }
                                 if (roomOne != null && roomTwo != null)
                                 {
                                     Console.WriteLine("Connection types - " + CONNECTION_TYPES_DISPLAY);
                                     roomConnections.Add(new RoomConnection(roomOne, roomTwo, ReadConnectionValues("Connection types from first to second: "), ReadConnectionValues("Connection types from second to first: ")));
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Rooms name(s) invalid.");
                                 }
 
                                 Console.WriteLine("Do you want to make another?");
@@ -443,14 +503,14 @@ namespace WL4_Randomizer
                                 Console.WriteLine("Subroom names");
                                 foreach (string s in vanillaRooms[i])
                                 {
-                                    Console.Write(s + " - ");
+                                    Console.Write("\"{0}\" - ", s);
                                 }
                                 
                                 EntityInfo[] entities = PathCreator.GetEntities(passage, level, i);
 
                                 for (int eI = 0; eI < entities.Length; eI++)
                                 {
-                                    Console.WriteLine("Room:{2} X:{0} Y:{1} Type:{3}", entities[eI].X, entities[eI].Y, i, entities[eI].originalType);
+                                    Console.WriteLine("\nRoom:{2} X:{0} Y:{1} Type:{3}", entities[eI].X, entities[eI].Y, i, entities[eI].originalType);
                                     Console.WriteLine("What subroom do you want this entity to be placed in? (leave blank if ignoring entity)");
                                     string input = ReadLine();
                                     if (input == "")
@@ -459,8 +519,15 @@ namespace WL4_Randomizer
                                     {
                                         rooms[input].entityList.Add(entities[eI]);
                                     }
+                                    else if (vanillaRooms[i].Contains(i + "-" +input))
+                                    {
+                                        rooms[i + "-" + input].entityList.Add(entities[eI]);
+                                    }
                                     else
+                                    {
+                                        Console.WriteLine("Sorry, but that subroom doesn't exist.  Please try again!");
                                         eI--;
+                                    }
                                 }
                                 
                                 foreach (string s in vanillaRooms[i])
@@ -542,33 +609,35 @@ namespace WL4_Randomizer
         private static int SetupRNG()
         {
             Console.WriteLine("Type in your seed now.  Leave blank if you wish to have a seed made for you. ");
-            string s = "100";// Console.ReadLine();
-
+            string input = Console.ReadLine();
+            
             int seed;
-            if (!int.TryParse(s, out seed))
+            if (!int.TryParse(input, out seed))
             {
-                seed = s == "" ? (int)DateTime.Now.Ticks : s.GetHashCode();
+                seed = input == "" ? (int)DateTime.Now.Ticks : input.GetHashCode();
             }
 
             Console.WriteLine("Your seed is " + seed);
 
+            File.WriteAllLines(directory + "//lastSeed.txt", new string[] { seed.ToString() });
+
             rngGen = new Random(seed);
-            return seed;
+            return 100;
         }
         private static void RandomizeLevels()
         {
             List<byte> bytes = new List<byte>();
-            for (int hallway = 0; hallway < 6; hallway++)
+            for (int hallway = 1; hallway < 6; hallway++)
             {
                 for (int level = 0; level < 4; level++)
                 {
                     if ((hallway == 0 || hallway == 5) && level > 0)
                         break;
 
-                    bytes.Add(romBuffer[PathCreator.LevelIndexLocation + hallway * 24 + level * 4]);
+                    bytes.Add(romBuffer[PathCreator.LevelHeaderIndexLocation + hallway * 24 + level * 4]);
                 }
             }
-            for (int hallway = 0; hallway < 6; hallway++)
+            for (int hallway = 1; hallway < 6; hallway++)
             {
                 for (int level = 0; level < 4; level++)
                 {
@@ -577,7 +646,7 @@ namespace WL4_Randomizer
 
                     int rng = rngGen.Next(bytes.Count);
 
-                    romBuffer[PathCreator.LevelIndexLocation + hallway * 24 + level * 4] = bytes[rng];
+                    romBuffer[PathCreator.LevelHeaderIndexLocation + hallway * 24 + level * 4] = bytes[rng];
                     bytes.RemoveAt(rng);
                 }
             }
@@ -827,8 +896,7 @@ namespace WL4_Randomizer
         }
         public static int GetLevelIndex(int _passage, int _level)
         {
-            int value = 0xA0D00 - GetPointer(PathCreator.LevelHeadersLocation + _passage * 24 + _level * 4);
-            return value;
+            return romBuffer[PathCreator.LevelHeaderIndexLocation + _passage * 24 + _level * 4];
         }
         public static ConnectionTypes ReadConnectionValues(string display = "")
         {
@@ -870,106 +938,6 @@ namespace WL4_Randomizer
             }
 
             return retVal;
-        }
-    }
-    class CDLess
-    {
-        public static void ChangeNormal(RoomNode[] rooms, int[][] frog, int[][] chests, ref byte[] rom, Random rng, PathCreatorOld level, bool hasCD = true)
-        {
-
-            int buffer = 0;
-            int index = 0;
-
-            for (int i = 0; i < rooms.Length; i++) // Clear levels
-            {
-                index = rooms[i].EntityListIndex + 2;
-
-                while (rom[index] != 0xFF) // Check every entity in list
-                {
-                    if (rom[index] < 0xF && (rom[index] != 0x08 || frog.Length > 0)) // If swappable entity, turn into gem, and skip frog switch if keeping in same place
-                    {
-                        rom[index] = 0x07;
-                    }
-                    index += 3;
-                }
-            }
-            
-            if (frog.Length != 0)
-            {
-                index = rng.Next(0, frog.Length);
-
-                rom[frog[index][0]] = 0x08;
-                level.rooms[frog[index][1]].subrooms[frog[index][2]].itemsContained |= ItemFound.Frog;
-            }
-
-            List<int> possiblities = new List<int>();
-            for (int i = 0; i < chests.Length; i++)
-            {
-                possiblities.Add(i);
-            }
-
-            for (int i = 0; i < 6; i++) // Chests
-            {
-                if (possiblities.Count == 0 && i >= 4)
-                    break;
-                if (!hasCD && i == 4)
-                    continue;
-                
-                while (true)
-                {
-                    buffer = rng.Next(possiblities.Count);
-
-                    index = possiblities[buffer];
-
-                    if (rom[chests[index][0]] != 0x07)
-                        continue;
-
-                    rom[chests[index][0]] = (byte)(i + 1);
-
-                    possiblities.RemoveAt(buffer);
-                    break;
-                }
-            }
-
-            List<int> potentials = new List<int>();
-
-            bool loopOn = true;
-            while (loopOn)
-            {
-                index = rooms[rng.Next(0, rooms.Length)].EntityListIndex + 2;
-
-                while (rom[index] != 0xFF)
-                {
-                    if (rom[index] == 0x07)
-                    {
-                        loopOn = false;
-                        potentials.Add(index);
-                    }
-                    index += 3;
-                }
-
-                if (!loopOn)
-                {
-                    rom[potentials[rng.Next(potentials.Count)]] = 0x09;
-                }
-            }
-
-        }
-
-        public static void Randomize(ref byte[] rom, int index, Random rng)
-        {
-            List<byte> list = new List<byte>();
-
-            for (int i = index + 2; rom[i] != 0xFF; i += 3)
-            {
-                list.Add(rom[i]);
-            }
-            for (int i = index + 2; rom[i] != 0xFF; i += 3)
-            {
-                index = rng.Next(list.Count);
-                rom[i] = list[index];
-                list.RemoveAt(index);
-            }
         }
     }
 }

@@ -27,5 +27,10 @@ namespace WL4_Randomizer
 
             return room == firstRoom ? ((firstToSecond & type) != ConnectionTypes.None) : ((secondToFirst & type) != ConnectionTypes.None);
         }
+
+        public RoomInfo GetOtherRoom(RoomInfo room)
+        {
+            return room == firstRoom ? secondRoom : firstRoom;
+        }
     }
 }

@@ -34,10 +34,10 @@ namespace WL4_Randomizer
             }
             if (removeList != null)
                 removeList.Remove(this);
-            if (addList != null && !addList.Contains(this))
+            if (addList != null && !addList.Contains(this) && doorList.Count > 0)
                 addList.Add(this);
 
-            Console.WriteLine("Clearing room " + roomName);
+            Program.DebugLog("Clearing room " + roomName);
         }
 
         public override string ToString()

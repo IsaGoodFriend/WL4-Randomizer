@@ -149,6 +149,12 @@ namespace WL4_Randomizer
             return (enterStyle & connect) == ConnectionTypes.None && (exitStyle & connect) == ConnectionTypes.None;
         }
 
+        public void Connect(DoorInfo door)
+        {
+            door.connectedDoor = this;
+            connectedDoor = door;
+        }
+
         public override string ToString()
         {
             return "Base Room: " + BaseRoom.roomName;
