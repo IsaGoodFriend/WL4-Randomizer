@@ -17,27 +17,18 @@ namespace WL4_Randomizer
             roomName = _name;
         }
 
-        public void ResetRoom(List<RoomInfo> removeList, List<RoomInfo> addList, Dictionary<DoorType, List<DoorInfo>> dictionary)
+        public void ResetRoom(List<RoomInfo> removeList, List<RoomInfo> addList, DoorPairingsTracker tracker)
         {
             foreach (DoorInfo door in doorList)
             {
-                if (door.connectedDoor != null)
-                {
-                    if (!dictionary[door.doorType].Contains(door.connectedDoor))
-                        dictionary[door.doorType].Add(door.connectedDoor);
-                    if (!dictionary[door.connectedDoor.doorType].Contains(door))
-                        dictionary[door.connectedDoor.doorType].Add(door);
-
-                    door.connectedDoor.connectedDoor = null;
-                    door.connectedDoor = null;
-                }
+                tracker.DisconnectDoor(door);
             }
             if (removeList != null)
                 removeList.Remove(this);
             if (addList != null && !addList.Contains(this) && doorList.Count > 0)
                 addList.Add(this);
 
-            Program.DebugLog("Clearing room " + roomName);
+            //Program.DebugLog("Clearing room " + roomName);
         }
 
         public override string ToString()

@@ -46,8 +46,8 @@ namespace WL4_Randomizer
             int index = baseIndex + doorIndex*12, roomNumber = Program.romBuffer[index + 1];
             int width = Program.romBuffer[index + 3] - Program.romBuffer[index + 2] + 1, height = Program.romBuffer[index + 5] - Program.romBuffer[index + 4] + 1;
 
-            Console.WriteLine("Door Types - 1:Doorway ; 2:Offscreen Passage ; 3:Pipe");
-            Console.WriteLine("\nDoor Info:\nIndex: " + doorIndex + "\nRoom: " + Program.romBuffer[index + 1] + "  Type: " + Program.romBuffer[index]  + "\nX:" + Program.romBuffer[index+2] + " Y:" + Program.romBuffer[index+4] + " W:" + width + " H:" + height);
+            Console.WriteLine("Door Types - 1:Doorway 2:OffscreenPassage 3:Pipe");
+            Console.WriteLine("\nDoor Info:\nIndex: " + doorIndex + "\nRoom: " + Program.romBuffer[index + 1] + "  Type: " + Program.romBuffer[index] + "\nX:" + Program.romBuffer[index + 2] + " Y:" + Program.romBuffer[index + 4] + " W:" + width + " H:" + height);
 
             Console.WriteLine("\nIs this door used?");
             if (isIgnored = !Program.GetBoolFromUser(true)) // Get whether door is used, defaulting to true
@@ -133,7 +133,7 @@ namespace WL4_Randomizer
 
         public void SetRomInfo(int offset)
         {
-            Console.WriteLine(Program.romBuffer[offset + romArrayIndex * 12 + 6] + ", " + (byte)(connectedDoor == null ? 0 : connectedDoor.romArrayIndex));
+            //Program.DebugLog(Program.romBuffer[offset + romArrayIndex * 12 + 6] + ", " + (byte)(connectedDoor == null ? 0 : connectedDoor.romArrayIndex));
             Program.romBuffer[offset + romArrayIndex * 12 + 6] = (byte)(connectedDoor == null ? romArrayIndex : connectedDoor.romArrayIndex);
         }
         public bool CanWalkInto(ConnectionTypes connect)

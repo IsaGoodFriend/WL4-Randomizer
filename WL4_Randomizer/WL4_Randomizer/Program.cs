@@ -38,6 +38,8 @@ namespace WL4_Randomizer
     }
     class Program
     {
+        public static Dictionary<int, int> roomPointerTemp = new Dictionary<int, int>();
+
         public const string CONNECTION_TYPES_DISPLAY = "1:Normal ; 2:Before Timer ; 4:After Timer\n8:Minion Jump ; 16:Heavy Minion Jump ; 32:Zip ; 64:Difficult Minion Jump\nBlank will give value of 1, put 0 if blocked one way";
         private static ConnectionTypes pathingLogic = ConnectionTypes.Default;
         public static ConnectionTypes pathingLogicBefore { get { return pathingLogic | ConnectionTypes.BeforeSwitch; } }
@@ -161,7 +163,7 @@ namespace WL4_Randomizer
             }
 
             //RandomizeLevels();
-            romBuffer[PathCreator.LevelHeaderIndexLocation] = 0x16;
+            romBuffer[PathCreator.LevelHeaderIndexLocation] = 0x2;
 
             Console.WriteLine("Writing to " + directory + "\\" + RandomizedRomPath);
             File.WriteAllBytes(directory + "\\" + RandomizedRomPath, romBuffer);
@@ -171,6 +173,11 @@ namespace WL4_Randomizer
 
         public static void Main(string[] args)
         {
+            roomPointerTemp.Add(4 * 6 + 0, 12);
+            roomPointerTemp.Add(4 * 6 + 1, 13);
+            roomPointerTemp.Add(4 * 6 + 2, 14);
+            roomPointerTemp.Add(4 * 6 + 3, 15);
+
             if (args.Length == 0)
             {
                 args = new string[] { directory + "\\WarioLand4Original.gba" };
@@ -370,10 +377,10 @@ namespace WL4_Randomizer
                         doc.WriteStartElement("level_" + passage + "_" + level);
 
                         // Get the start of the level's doorway array
-                        int levelIndex = GetLevelIndex(passage, level);
-                        DebugLog(passage + ", " + level + ", " + levelIndex.ToString("X"));
-                        int doorArrayIndex = GetPointer(PathCreator.DoorTableLocation + levelIndex * 4);
 
+                        int levelID = GetLevelID(passage, level);
+                        int doorArrayIndex = GetPointer(PathCreator.DoorTableLocation + levelID * 4);
+                        
                         DebugLog(romBuffer[doorArrayIndex]);
 
                         int currentDoor = 1;
@@ -609,7 +616,7 @@ namespace WL4_Randomizer
         private static int SetupRNG()
         {
             Console.WriteLine("Type in your seed now.  Leave blank if you wish to have a seed made for you. ");
-            string input = Console.ReadLine();
+            string input = ReadLine();
             
             int seed;
             if (!int.TryParse(input, out seed))
@@ -894,9 +901,17 @@ namespace WL4_Randomizer
             //Console.WriteLine(retVal.ToString("X"));
             return retVal;
         }
-        public static int GetLevelIndex(int _passage, int _level)
+        public static int GetLevelHeaderIndex(int _passage, int _level)
         {
-            return romBuffer[PathCreator.LevelHeaderIndexLocation + _passage * 24 + _level * 4];
+            int val = _passage * 6 + _level;
+            return romBuffer[PathCreator.LevelHeaderIndexLocation + val * 4];
+        }
+        public static int GetLevelID(int _passage, int _level)
+        {
+            int header = GetLevelHeaderIndex(_passage, _level);
+            header = romBuffer[PathCreator.LevelHeadersLocation + header * 12];
+            
+            return header;
         }
         public static ConnectionTypes ReadConnectionValues(string display = "")
         {

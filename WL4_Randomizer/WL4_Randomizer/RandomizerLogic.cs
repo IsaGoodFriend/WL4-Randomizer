@@ -60,37 +60,55 @@ namespace WL4_Randomizer
     /// Clear base room, door, and entity array
 
     // TODO: Find solution to dead end room problem, assuming it shows up again
-    delegate void ClearRoomEvent(List<RoomInfo> removeList, List<RoomInfo> addList, Dictionary<DoorType, List<DoorInfo>> doorDictionary);
+    delegate void ClearRoomEvent(List<RoomInfo> removeList, List<RoomInfo> addList, DoorPairingsTracker tracker);
     class PathCreator
     {
         public const int DoorTableLocation = 0x78F21C, LevelHeadersLocation = 0x639068, LevelHeaderIndexLocation = 0x6391C4, RoomDataTableLocation = 0x78F280;
 
-        private static List<RoomInfo> roomList = new List<RoomInfo>(), oneDoorRooms = new List<RoomInfo>();
+        private static List<RoomInfo> roomList = new List<RoomInfo>();
         private static List<RoomInfo> roomsNotInLogic = new List<RoomInfo>();
         private static List<DoorInfo> doorList = new List<DoorInfo>();
         private static List<EntityInfo> entityList = new List<EntityInfo>();
 
         private static List<int> vanillaRoomNumbers = new List<int>();
         private static List<List<EntityInfo>> vanillaEntities = new List<List<EntityInfo>>();
+        private static DoorPairingsTracker doorPairs = new DoorPairingsTracker();
 
         /// <summary>
         /// Doors are sorted by the OPPPOSITE of what their own type is for easier searching
         /// </summary>
-        private static Dictionary<DoorType, List<DoorInfo>> existingDoors = new Dictionary<DoorType, List<DoorInfo>>();
         private static RoomInfo portalRoom;
 
         private static event ClearRoomEvent ClearRoom;
 
         private static int count;
 
+        private static bool hasEntities = true;
+
+        private static string PassageName(int passage)
+        {
+            switch (passage)
+            {
+                default:
+                    return "Entry";
+                case 1:
+                    return "Emerald";
+                case 2:
+                    return "Ruby";
+                case 3:
+                    return "Topaz";
+                case 4:
+                    return "Sapphire";
+                case 5:
+                    return "Golden";
+            }
+        }
+
         public static EntityInfo[] GetEntities(int passage, int level, int room)
         {
-            int roomIndex = Program.GetLevelIndex(passage, level);
-            //Program.DebugLog(roomIndex);
-            roomIndex = Program.GetPointer(RoomDataTableLocation + roomIndex * 4) + room * 0x2c;
-            //Program.DebugLog(roomIndex.ToString("X"));
+            int levelID = Program.GetLevelID(passage, level);
+            int roomIndex = Program.GetPointer(RoomDataTableLocation + levelID * 4) + room * 0x2c;
             roomIndex = Program.GetPointer(roomIndex + 0x20);
-            //Program.DebugLog(roomIndex.ToString("X"));
 
             List<EntityInfo> retVal = new List<EntityInfo>();
 
@@ -108,8 +126,11 @@ namespace WL4_Randomizer
         }
         public static void CreatePath(int passage, int level, XmlNode levelNode)
         {
-            Console.WriteLine("--- Randomizing level {0};{1} ---", passage + 1, level + 1);
-            int levelHeaderPointer = LevelHeadersLocation + Program.GetLevelIndex(passage, level) * 12;
+            if (passage == 5)
+                hasEntities = false;
+
+            Console.WriteLine("--- Randomizing level {0};{1} ---", PassageName(passage), level + 1);
+            int levelHeaderPointer = LevelHeadersLocation + Program.GetLevelHeaderIndex(passage, level) * 12;
             int roomMax = Program.romBuffer[levelHeaderPointer + 1];
 
             for (int i = 0; i < roomMax; i++)
@@ -141,15 +162,16 @@ namespace WL4_Randomizer
                 levelEntities.AddRange(info);
             }
 
-            List<RoomInfo> accessFromStart = new List<RoomInfo>();
+            List<RoomInfo> inLogic = new List<RoomInfo>();
             roomsNotInLogic.AddRange(roomList);
-            foreach (RoomInfo info in roomList)
-            {
-                if (info.doorList.Count == 1)
-                    oneDoorRooms.Add(info);
-            }
 
-            BranchLogic(accessFromStart, portalRoom);
+            doorPairs.FinalizeDoors();
+
+            RestartLogic:
+
+            BranchLogic(inLogic, portalRoom);
+
+            List<RoomInfo> checkedRooms = new List<RoomInfo>();
 
             /// While there are still rooms not in logic yet
             ///     Get two empty pointers, one for door in logic, one out of logic
@@ -170,7 +192,6 @@ namespace WL4_Randomizer
             ///     Redo before logic path on the once out of logic door's base room
             /// 
             /// Connect up the rest of the doors
-
             count = 0;
             /// While there are still rooms not in logic yet
             while (roomsNotInLogic.Count > 0)
@@ -188,26 +209,14 @@ namespace WL4_Randomizer
 
                 /// Get all possible door pairings between out of logic doors and in logic doors that are already connected.
                 {
-                    List<DoorPairings> pairs = new List<DoorPairings>();
-                    foreach (RoomInfo outRoom in roomsNotInLogic)
-                    {
-                        foreach (DoorInfo outDoor in outRoom.doorList)
-                        {
-                            DoorType type = (DoorType)(-(int)outDoor.doorType);
+                    DoorPairing[] pairs = FindPossiblePairs(roomsNotInLogic.ToArray(), inLogic.ToArray(), true);
 
-                            foreach (RoomInfo inRoom in accessFromStart)
-                            {
-                                foreach (DoorInfo inDoor in inRoom.doorList)
-                                {
-                                    if (inDoor.doorType == type && inDoor.connectedDoor != null)
-                                    {
-                                        pairs.Add(new DoorPairings(outDoor, inDoor));
-                                    }
-                                }
-                            }
-                        }
+                    if (pairs.Length == 0)
+                    {
+                        inLogic[Program.GetRandomInt(inLogic.Count)].ResetRoom(inLogic, roomsNotInLogic, doorPairs);
+                        goto RestartLogic;
                     }
-                    DoorPairings pair = pairs[Program.GetRandomInt(pairs.Count)];
+                    DoorPairing pair = pairs[Program.GetRandomInt(pairs.Length)];
                     /// Pick a random pair.
                     /// If no pairs exist, throw error
                     /// 
@@ -216,11 +225,11 @@ namespace WL4_Randomizer
                 do
                 {
                     /// Pick random room in logic...
-                    int v = Program.GetRandomInt(accessFromStart.Count);
+                    int v = Program.GetRandomInt(inLogic.Count);
                     Program.DebugLog("Index {0}", v); 
                     outOfLogicDoor = null;
 
-                    RoomInfo inLogicRoom = accessFromStart[v], outofLogicRoom;
+                    RoomInfo inLogicRoom = inLogic[v], outofLogicRoom;
 
                     /// ...and out of logic.
                     /// Pick random door from out of logic room.
@@ -260,78 +269,78 @@ namespace WL4_Randomizer
                 RoomInfo roomOne    = firstDoor.BaseRoom,   roomTwo     = secondDoor.BaseRoom;
 
                 /// Disconnect doors
-                //if (!existingDoors[secondDoor.doorType].Contains(firstDoor))
-                     existingDoors[secondDoor.doorType].Add(firstDoor);
-                //if (!existingDoors[firstDoor.doorType].Contains(secondDoor))
-                     existingDoors[firstDoor.doorType].Add(secondDoor);
 
-                firstDoor.connectedDoor = null;
-                secondDoor.connectedDoor = null;
+                doorPairs.DisconnectDoor(firstDoor);
 
                 /// if one of the two in logic room isn't connected to portal
-                List<RoomInfo> checkedRooms = new List<RoomInfo>();
-                if (!IsConnectedToFirstRoom(roomOne, checkedRooms, false))
+
+                checkedRooms.Clear();
+                if (!IsConnectedToFirstRoom(roomOne, checkedRooms))
                 {
-                    ClearRoom(accessFromStart, roomsNotInLogic, existingDoors);
+                    ClearRoom(inLogic, roomsNotInLogic, doorPairs);
                     checkedRooms.Clear();
                     ClearRoom = null;
                 }
-                if (!IsConnectedToFirstRoom(roomTwo, checkedRooms, false))
+                if (!IsConnectedToFirstRoom(roomTwo, checkedRooms))
                 {
                     ClearRoom = null;
                     checkedRooms.Clear();
 
-                    BranchLogic(accessFromStart, outOfLogicDoor.BaseRoom);
+                    BranchLogic(inLogic, outOfLogicDoor.BaseRoom);
 
-                    existingDoors[secondDoor.doorType].Remove(firstDoor);
-                    existingDoors[firstDoor.doorType].Remove(secondDoor);
-                    firstDoor.Connect(secondDoor);
+                    doorPairs.ConnectDoors(firstDoor, secondDoor);
 
                     continue;
                 }
 
-                existingDoors[inLogicDoor.doorType].Remove(outOfLogicDoor);
-                existingDoors[outOfLogicDoor.doorType].Remove(inLogicDoor);
-                inLogicDoor.Connect(outOfLogicDoor);
+                doorPairs.ConnectDoors(inLogicDoor, outOfLogicDoor);
 
-                BranchLogic(accessFromStart, outOfLogicDoor.BaseRoom);
-                
-                //if (roomsNotInLogic.Count == 0 && passage > 0)
-                //{
-                //    bool softlockSafe = true;
-
-                //    foreach (RoomInfo room in oneDoorRooms)
-                //    {
-                //        if (!IsConnectedToFirstRoom(room, checkedRooms, true))
-                //        {
-                //            softlockSafe = false;
-                //            ClearRoom += room.ResetRoom;
-                //        }
-                //        checkedRooms.Clear();
-                //    }
-
-                //    if (!softlockSafe)
-                //    {
-                //        ClearRoom(accessFromStart, roomsNotInLogic, existingDoors);
-                //        for (int i = 0; i < Math.Ceiling(roomList.Count / 5f); i++)
-                //        {
-                //            roomList[Program.GetRandomInt(roomList.Count, 1)].ResetRoom(accessFromStart, roomsNotInLogic, existingDoors);
-                //        }
-                //    }
-                //}
-                checkedRooms.Clear();
-
-                //if (count < 20 || (count < 200 && (count%10) == 0) || (count%100) == 0)
-                //    Program.DebugLog(count++);
+                BranchLogic(inLogic, outOfLogicDoor.BaseRoom);
             }
+            Program.DebugLog("NoMoreRooms out of Logic");
 
-            ConnectLeftoverDoors();
+            //List<RoomInfo> tempRooms = new List<RoomInfo>();
+            //checkedRooms.Clear();
+            //foreach (RoomInfo info in roomList)
+            //{
+            //    if (checkedRooms.Contains(info))
+            //        continue;
+            //    if (!CanEnterFirstRoom(info, tempRooms, true))
+            //    {
+            //        foreach (RoomInfo roomBad in tempRooms)
+            //        {
+            //            roomBad.ResetRoom(inLogic, roomsNotInLogic, doorPairs);
+            //        }
+            //        goto RestartLogic;
+            //    }
+            //    checkedRooms.AddRange(tempRooms);
+            //}
 
+            //checkedRooms.Clear();
+            //tempRooms.Clear();
+            //foreach (RoomInfo info in roomList)
+            //{
+            //    if (checkedRooms.Contains(info))
+            //        continue;
+            //    if (!CanEnterFirstRoom(info, tempRooms, false))
+            //    {
+            //        foreach (RoomInfo roomBad in tempRooms)
+            //        {
+            //            roomBad.ResetRoom(inLogic, roomsNotInLogic, doorPairs);
+            //        }
+            //        goto RestartLogic;
+            //    }
+            //    checkedRooms.AddRange(tempRooms);
+            //}
 
-            RandomizeEntities(accessFromStart);
+            doorPairs.ConnectLeftoverDoors();
+            
+            RandomizeEntities(inLogic);
 
-            int doorArrayStart = Program.GetPointer(DoorTableLocation + Program.GetLevelIndex(passage, level) * 4);
-            foreach (RoomInfo room in accessFromStart)
+            int levelID = Program.GetLevelID(passage, level);
+            int doorArrayStart = Program.GetPointer(DoorTableLocation + levelID * 4);
+
+            foreach (RoomInfo room in inLogic)
             {
                 foreach (DoorInfo door in room.doorList)
                 {
@@ -376,24 +385,16 @@ namespace WL4_Randomizer
 
             foreach (DoorInfo door in room.doorList)
             {
-                if (door.connectedDoor == null && door.CanWalkOutOf(Program.pathingLogicBefore) && HasConnections(door, Program.pathingLogicBefore))
+                if (door.connectedDoor == null && door.CanWalkOutOf(Program.pathingLogicBefore) && doorPairs.HasConnections(door, Program.pathingLogicBefore))
                 {
-                    DoorInfo newDoor = null;
-                    List<DoorInfo> neededList = existingDoors[door.doorType];
-                    do
-                    {
-                        int newNumber = Program.GetRandomInt(neededList.Count);
-                        newDoor = neededList[newNumber];
-                        if (!newDoor.CanWalkInto(Program.pathingLogicBefore) || newDoor == door)
-                            newDoor = null;
-                    }
-                    while (newDoor == null);
-                    door.Connect(newDoor);
+                    DoorPairing[] pairings = FindPossiblePairs(roomList.ToArray(), door, false);
+                    if (pairings.Length == 0)
+                        return;
 
-                    //Program.DebugLog("Door " + room.doorList.IndexOf(door) + " of room " + room.roomName + " connected to door " + newDoor.BaseRoom.doorList.IndexOf(newDoor) + " of room " + newDoor.BaseRoom.roomName);
+                    DoorInfo newDoor = pairings[Program.GetRandomInt(pairings.Length)].first;
 
-                    neededList.Remove(newDoor);
-                    existingDoors[newDoor.doorType].Remove(door);
+                    doorPairs.ConnectDoors(newDoor, door);
+                    
                     BranchPathBeforeSwitch(newDoor.BaseRoom, array, doorArray,roomConnections);
                 }
                 else if (door.CanWalkOutOf(Program.pathingLogicAfter))
@@ -425,22 +426,16 @@ namespace WL4_Randomizer
 
             foreach (DoorInfo door in room.doorList)
             {
-                if (door.connectedDoor == null && door.CanWalkOutOf(Program.pathingLogicAfter) && HasConnections(door, Program.pathingLogicBefore))
+                if (door.connectedDoor == null && door.CanWalkOutOf(Program.pathingLogicAfter) && doorPairs.HasConnections(door, Program.pathingLogicBefore))
                 {
-                    DoorInfo newDoor = null;
-                    List<DoorInfo> neededList = existingDoors[door.doorType];
-                    do
-                    {
-                        newDoor = neededList[Program.GetRandomInt(neededList.Count)];
-                        if (!newDoor.CanWalkInto(Program.pathingLogicAfter) || newDoor == door)
-                            newDoor = null;
-                    }
-                    while (newDoor == null);
+                    DoorPairing[] pairings = FindPossiblePairs(roomList.ToArray(), door, false);
+                    if (pairings.Length == 0)
+                        return;
 
-                    neededList.Remove(newDoor);
-                    existingDoors[newDoor.doorType].Remove(door);
+                    DoorInfo newDoor = pairings[Program.GetRandomInt(pairings.Length)].first;
 
-                    door.Connect(newDoor);
+                    doorPairs.ConnectDoors(door, newDoor);
+                    
                     BranchPathAfterSwitch(alreadyFound, newDoor.BaseRoom);
                 }
             }
@@ -458,7 +453,7 @@ namespace WL4_Randomizer
             //int roomIndex = Program.GetPointer(Program.GetPointer(RoomDataTableLocation + Program.GetLevelIndex(_passage, _level) * 4) + room * 0x2c + 32);
             vanillaEntities.Add(list = new List<EntityInfo>(GetEntities(_passage, _level, room)));
         }
-        private static bool IsConnectedToFirstRoom(RoomInfo room, List<RoomInfo> array, bool backtracking)
+        private static bool IsConnectedToFirstRoom(RoomInfo room, List<RoomInfo> array)
         {
             if (room == roomList[0])
             {
@@ -469,41 +464,91 @@ namespace WL4_Randomizer
             if (array.Contains(room))
                 return false;
             array.Add(room);
-
-            if (!backtracking)
-                ClearRoom += room.ResetRoom;
+            
+            ClearRoom += room.ResetRoom;
 
             foreach (DoorInfo door in room.doorList)
             {
-                if (door.connectedDoor != null && (!backtracking || door.CanWalkOutOf(Program.pathingLogicBefore | Program.pathingLogicAfter)))
+                if (door.connectedDoor != null)
                 {
-                    if (IsConnectedToFirstRoom(door.connectedDoor.BaseRoom, array, backtracking))
+                    if (IsConnectedToFirstRoom(door.connectedDoor.BaseRoom, array))
                         return true;
                 }
             }
-            foreach(RoomConnection connection in room.connectionList)
+            foreach (RoomConnection connection in room.connectionList)
             {
                 RoomInfo otherRoom = connection.GetOtherRoom(room);
                 if (connection.CanPassThrough(otherRoom, Program.pathingLogicBefore))
                 {
-                    if (IsConnectedToFirstRoom(otherRoom, array, backtracking))
+                    if (IsConnectedToFirstRoom(otherRoom, array))
                         return true;
                 }
             }
             return false;
         }
-        private static bool HasConnections(DoorInfo info, ConnectionTypes types)
+        private static bool CanEnterFirstRoom(RoomInfo room, List<RoomInfo> array, bool afterSwitch)
         {
-            //return true;
-            foreach (DoorInfo door in existingDoors[info.doorType])
+            if (room == roomList[0])
             {
-                if (door.CanWalkInto(types))
+                ClearRoom = null;
+                return true;
+            }
+            if (array.Contains(room))
+                return false;
+            array.Add(room);
+
+            ClearRoom += room.ResetRoom;
+
+            foreach (DoorInfo door in room.doorList)
+            {
+                if (door.connectedDoor != null && door.CanWalkInto(afterSwitch ? Program.pathingLogicAfter : Program.pathingLogicBefore))
                 {
-                    Program.DebugLog("Found doorway");
-                    return true;
+                    if (CanEnterFirstRoom(door.connectedDoor.BaseRoom, array, afterSwitch))
+                        return true;
+                }
+            }
+            foreach (RoomConnection connection in room.connectionList)
+            {
+                RoomInfo otherRoom = connection.GetOtherRoom(room);
+                if (connection.CanPassThrough(otherRoom, afterSwitch ? Program.pathingLogicAfter : Program.pathingLogicBefore))
+                {
+                    if (CanEnterFirstRoom(otherRoom, array, afterSwitch))
+                        return true;
                 }
             }
             return false;
+        }
+        private static DoorPairing[] FindPossiblePairs(RoomInfo[] listOne, RoomInfo[] listTwo, bool? onlyConnected = null)
+        {
+            List<DoorPairing> retVal = new List<DoorPairing>();
+            foreach (RoomInfo outRoom in listOne)
+            {
+                foreach (DoorInfo outDoor in outRoom.doorList)
+                {
+                    retVal.AddRange(FindPossiblePairs(listTwo, outDoor, onlyConnected));
+                }
+            }
+            return retVal.ToArray();
+        }
+        private static DoorPairing[] FindPossiblePairs(RoomInfo[] listOne, DoorInfo two, bool? onlyConnected = null)
+        {
+            List<DoorPairing> retVal = new List<DoorPairing>();
+            foreach (RoomInfo outRoom in listOne)
+            {
+                foreach (DoorInfo outDoor in outRoom.doorList)
+                {
+                    if (outDoor == two)
+                        continue;
+
+                    DoorType type = (DoorType)(-(int)outDoor.doorType);
+
+                    if ((onlyConnected == null || (onlyConnected.Value == (two.connectedDoor != null))) && two.doorType == type)
+                    {
+                        retVal.Add(new DoorPairing(outDoor, two));
+                    }
+                }
+            }
+            return retVal.ToArray();
         }
         //private static DoorInfo GetRandomDoor(DoorInfo door)
         //{
@@ -512,6 +557,8 @@ namespace WL4_Randomizer
 
         private static void RandomizeEntities(List<RoomInfo> accessFromStart)
         {
+            if (!hasEntities)
+                return;
             RoomInfo randomRoom = null;
             do
             {
@@ -640,10 +687,7 @@ namespace WL4_Randomizer
 
             doorList.Add(door = new DoorInfo(doorType, exitType, enterType, index, baseRoom));
             baseRoom.doorList.Add(door);
-            DoorType inverseDoorType = (DoorType)(-(int)door.doorType);
-            if (!existingDoors.ContainsKey(inverseDoorType))
-                existingDoors.Add(inverseDoorType, new List<DoorInfo>());
-            existingDoors[inverseDoorType].Add(door);
+            doorPairs.AddDoor(door);
 
             return door;
         }
@@ -657,39 +701,6 @@ namespace WL4_Randomizer
             return (DoorType)typeValue;
         }
 
-        private static void ConnectLeftoverDoors()
-        {
-            for (int i = 1; i <= 3; i++)
-            {
-                if (!existingDoors.ContainsKey((DoorType)i))
-                    continue;
-                List<DoorInfo> firstList = existingDoors[(DoorType)i];
-                List<DoorInfo> secondList = existingDoors[(DoorType)(-i)];
-                if (firstList.Count > 0)
-                {
-                    while (firstList.Count > 0)
-                    {
-                        DoorInfo door = firstList[0];
-                        door.Connect(secondList[Program.GetRandomInt(secondList.Count)]);
-
-                        secondList.Remove(door.connectedDoor);
-                        firstList.Remove(door);
-                    }
-                }
-            }
-            if (existingDoors.ContainsKey(DoorType.Door))
-            {
-                List<DoorInfo> doors = existingDoors[DoorType.Door];
-                while (doors.Count > 0)
-                {
-                    int index = Program.GetRandomInt(doors.Count - 1) + 1;
-                    doors[0] = doors[index];
-                    doors.RemoveAt(index);
-                    doors.RemoveAt(0);
-                }
-            }
-        }
-
         private static void Clear()
         {
             roomList.Clear();
@@ -697,16 +708,142 @@ namespace WL4_Randomizer
             entityList.Clear();
             vanillaRoomNumbers.Clear();
             vanillaEntities.Clear();
-            existingDoors.Clear();
+            doorPairs.Clear();
         }
     }
-    struct DoorPairings
+    struct DoorPairing
     {
         public DoorInfo first, second;
-        public DoorPairings(DoorInfo _first, DoorInfo _second)
+        public DoorPairing(DoorInfo _first, DoorInfo _second)
         {
             first = _first;
             second = _second;
+        }
+    }
+    class DoorPairingsTracker
+    {
+        private Dictionary<DoorType, List<DoorInfo>> unconnectedDoors;
+        private List<DoorPairing> connectedPairs;
+
+        public DoorPairingsTracker()
+        {
+            connectedPairs = new List<DoorPairing>();
+            unconnectedDoors = new Dictionary<DoorType, List<DoorInfo>>();
+            unconnectedDoors.Add(DoorType.HallLeft, new List<DoorInfo>());
+            unconnectedDoors.Add(DoorType.HallRight, new List<DoorInfo>());
+            unconnectedDoors.Add(DoorType.PipeBottom, new List<DoorInfo>());
+            unconnectedDoors.Add(DoorType.PipeTop, new List<DoorInfo>());
+            unconnectedDoors.Add(DoorType.Ceiling, new List<DoorInfo>());
+            unconnectedDoors.Add(DoorType.Pit, new List<DoorInfo>());
+            unconnectedDoors.Add(DoorType.Door, new List<DoorInfo>());
+        }
+
+        public void Clear()
+        {
+            foreach (List<DoorInfo> info in unconnectedDoors.Values)
+            {
+                info.Clear();
+            }
+        }
+        public void FinalizeDoors()
+        {
+        }
+        public void ConnectLeftoverDoors()
+        {
+            for (int i = 1; i <= 3; i++)
+            {
+                if (!unconnectedDoors.ContainsKey((DoorType)i))
+                    continue;
+                List<DoorInfo> firstList = unconnectedDoors[(DoorType)i];
+                List<DoorInfo> secondList = unconnectedDoors[(DoorType)(-i)];
+                if (firstList.Count > 0)
+                {
+                    while (firstList.Count > 0)
+                    {
+                        ConnectDoors(firstList[0], secondList[Program.GetRandomInt(secondList.Count)]);
+                    }
+                }
+            }
+            if (unconnectedDoors.ContainsKey(DoorType.Door))
+            {
+                List<DoorInfo> doors = unconnectedDoors[DoorType.Door];
+                while (doors.Count > 0)
+                {
+                    int index = Program.GetRandomInt(doors.Count - 1) + 1;
+                    ConnectDoors(doors[0], doors[index]);
+                }
+            }
+        }
+
+        public void AddDoor(DoorInfo door)
+        {
+            unconnectedDoors[door.doorType].Add(door);
+        }
+
+        public void ConnectDoors(DoorInfo one, DoorInfo two)
+        {
+            if (!unconnectedDoors[one.doorType].Contains(one) || !unconnectedDoors[two.doorType].Contains(two))
+                return;
+            unconnectedDoors[one.doorType].Remove(one);
+            unconnectedDoors[two.doorType].Remove(two);
+            connectedPairs.Add(new DoorPairing(one, two));
+            one.Connect(two);
+        }
+        public void DisconnectDoor(DoorInfo door)
+        {
+            DoorPairing? pairing = null;
+            foreach (DoorPairing pair in connectedPairs)
+            {
+                if (door == pair.first || door == pair.second)
+                {
+                    pairing = pair;
+                    break;
+                }
+            }
+            
+            if (pairing != null)
+            {
+                DoorInfo one = pairing.Value.first, two = pairing.Value.second;
+                connectedPairs.Remove(pairing.Value);
+                unconnectedDoors[one.doorType].Add(one);
+                unconnectedDoors[two.doorType].Add(two);
+                one.connectedDoor = null;
+                two.connectedDoor = null;
+            }
+        }
+
+        public DoorInfo GetRandomUnusedDoorOfType(DoorType type)
+        {
+            if (unconnectedDoors[type].Count == 0)
+                return null;
+            return unconnectedDoors[type][Program.GetRandomInt(unconnectedDoors[type].Count)];
+        }
+        public DoorInfo GetRandomUnusedDoorOfConnectingType(DoorType type)
+        {
+            if (type != DoorType.Door)
+                type = (DoorType)(-(int)type);
+
+            if (unconnectedDoors[type].Count == 0)
+                return null;
+            return unconnectedDoors[type][Program.GetRandomInt(unconnectedDoors[type].Count)];
+        }
+
+        public bool HasConnections(DoorInfo info, ConnectionTypes types)
+        {
+            DoorType type = (DoorType)(-(int)info.doorType);
+            //return true;
+            foreach (DoorInfo door in unconnectedDoors[type])
+            {
+                if (door.CanWalkInto(types))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        public int GetUnusedSize(DoorType type)
+        {
+            return unconnectedDoors[type].Count;
         }
     }
 }
